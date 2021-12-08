@@ -21,13 +21,13 @@ def etime2name(etime,ecount='00',**kwargs):
 class defaults:
     def __init__(self):
         # mac    
-        basedir='/Users/anewman/Documents/Projects/rterg'
-        self.edirbase='/Users/anewman/Documents/Projects/EQerg/rterg_events/events'
+        basedir='/Users/anewman/Documents/Projects/EQerg'
+        self.edirbase=os.path.join(basedir,'rterg_events/events')
         # linuxbox
         #basedir='/home/anewman/html/research/RTerg/rterg'
         #self.edirbase=os.path.join(basedir,'processing/Examples/events')
         
-        self.libdir=os.path.join(basedir,'processing/rtergpy/libs')
+        self.libdir=os.path.join(basedir,'rterg/rtergpy/rtergpy/libs')
 
         self.network = "CU,GT,IC,II,IU" # GSN network
         self.stationrange=[25,80]  # distance in degrees
@@ -51,6 +51,7 @@ class defaults:
         pwindow=[prePtime,postPtime]
         self.waveparams=[fbands,pwindow,tstep]
         self.resample=10  # samples per second
+        self.smoothkern=10  # kernel for gaussian smoothing of data for duration estimates (1/2 on each side)
 
         # earth params
         self.rearth=6371e3 # in metes
@@ -62,7 +63,7 @@ class defaults:
         self.cutoff=15  # factor by which to ignore data (values must be between mean/cutoff and mean*cutoff)
 
         # Waveform source
-        self.src = 'NEIC'
+        self.src = 'NEIC'  # alternative 'IRIS'
     
 
 class event:
@@ -83,9 +84,30 @@ class event:
         self.focmech=[phi,delta,lmbda]
 
 def src2ergs(Defaults=defaults(), Event=event(), **kwargs):
+    """
+    Run event processing from data retrieval to final results with plots saved in appropriate directories.  
+    Heavy-lifting is performed by the classes (Defaults, and Event), so please be sure to locally define before running. 
+    Those are where you define the basic data, processing, run and event parameters.
+
+    Example:
+    from rtergpy.run import defaults, event, etime2name, src2ergs
+    from obspy import UTCDateTime
+    
+    Defaults=defaults()
+    Event=event()
+
+    Event.newData=False  # data may be already downloaded
+    eloc = [-57.567,-25.032,47]  # event lat,lon,depth 
+    etime= UTCDateTime(2021,8,12,18,32,52)  
+    Event.eventname=etime2name(etime,ecount=Event.ecount)
+    Event.origin=[eloc,etime]
+    Event.focmech=[106, 26, 56] # phi,delta,lmbda
+
+    src2ergs(Defaults=Defaults,Event=Event)
+    """
     from rtergpy.waveforms import getwaves,ErgsFromWaves,loadwaves,gmeanCut,tacer,tacerstats
     from rtergpy.waveforms import trstat2pd,e2Me,eventdir
-    from rtergpy.plotting import tacerplot,Edistplot,Ehistogram,Eazplot, stationEmapPygmt, fbandlabels
+    from rtergpy.plotting import tacerplot,Edistplot,Ehistogram,Eazplot, stationEmapPygmt, fbandlabels, Efluxplots
     #from rtergpy.run import defaults, event, etime2name
     #from obspy import UTCDateTime
     #from tqdm import tqdm
@@ -136,7 +158,8 @@ def src2ergs(Defaults=defaults(), Event=event(), **kwargs):
     print("Length EBB and EHF", len(EBB),len(EHF))
     # get tacer values and fist derivatives 
     print("Calculating TACER Values")
-    kern=10  # 1/2 width of gauss @ 1sig
+    #kern=10  # 1/2 width of gauss @ 1sig
+    kern=Defaults.smoothkern
     EBBSmooth=EBB.rolling(kern,win_type='gaussian',center=True, closed='both').mean(std=kern/2)
     dEBBdt=EBB.diff()
     dEBBdtSmooth=EBBSmooth.diff()
@@ -259,7 +282,8 @@ def src2ergs(Defaults=defaults(), Event=event(), **kwargs):
     try:
         if not os.path.exists('figs'):   # create and go into pkls dir
             os.mkdir('figs')
-        os.chdir('figs')    
+        os.chdir('figs')
+        Efluxplots(dEHFdtSmooth, trdf, eventname)    
         tacerplot(tacerHF,trdf,ttimes,meds,eventname,show=False)
         Edistplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=False,cutoff=cutoff)
         Eazplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=False,cutoff=cutoff)
@@ -272,6 +296,9 @@ def src2ergs(Defaults=defaults(), Event=event(), **kwargs):
     os.chdir(origwd)  # go back to old directory
 
 def mergeResults(Defaults=defaults(), iteration='00', **kwargs):
+    """
+    Reads all processed event information and returns a master dataframe of summary result information
+    """
     import glob
     import pandas as pd
     files= glob.glob(Defaults.edirbase +'/[12]???/[12]*/'+iteration+'/pkls/Results*.pkl')

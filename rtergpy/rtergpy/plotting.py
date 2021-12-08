@@ -25,17 +25,26 @@ def tacerplot(tacer,trdf,ttimes,meds,eventname,amp=50,show=True, **kwargs):
     plots tacer as a function of azimuth, removing values below the SNR ratio threshold, but showing all.
     Will output the median, 25 and 75 percentile results.
     """
+
     i=0
     fig=plt.figure()
     fig.patch.set_facecolor('white')
     plt.axvline(x=ttimes[0],color='red', ls='-',alpha=0.6,lw=2)
+    npts=len(tacer.iloc[:,0])
+    normsum=pd.Series(np.zeros(npts))
+    
     while i < len(tacer.columns):
         az=float(trdf[trdf['netstatchan'] == tacer.columns[i]]['az']) # azimuth (need to search since some are dropped) 
         [dist]=list(trdf['distance'][trdf['netstatchan'] == tacer.columns[i]])
-        plt.plot(amp*tacer.iloc[:,i]/max(tacer.iloc[:,i])+az-amp, '-', color='red', lw=0.8, alpha=0.6) 
+        norm=tacer.iloc[:,i]/max(tacer.iloc[:,i])
+        plt.plot(amp*(norm-1)+az, '-', color='red', lw=0.8, alpha=0.6) 
         plt.plot(meds.iloc[i,1],az, 'r|', alpha=1) 
         plt.plot(meds.iloc[i,1],az, 'r.', alpha=1) 
+        normsum += norm
         i +=1 
+    normsumnorm=normsum/max(normsum)
+    (normsumnorm*360-amp).plot(color='black', lw=1, alpha=0.5)
+    
     plt.ylim(-amp,360)
     plt.xlim(-5,min([ttimes[2]*3,len(tacer)]))
     plt.xlabel("Time relative to predicted P-arrival [s]")
@@ -207,6 +216,48 @@ def stationEmapPygmt(E,eloc,trdf,eventname,ttime,prePtime=-60,cutoff=15,itername
     fig.savefig('StationMap_'+eventname+'.png', dpi=150)
     if show:
         fig.show()
+
+def Efluxplots(dEdt,trdf,eventname, prePtime=-60, ampDIST=10, ampAZ=30, show=True, **kwargs):
+    npts=len(dEdt.iloc[:,0]) # N time-series points
+    nst=len(dEdt.iloc[0])  # N stations
+    normsum=pd.Series(np.zeros(npts))
+    for count in range(nst):
+        delta=float(trdf.distance[count][1])
+        max=np.max(dEdt.iloc[:,count])
+        norm=dEdt.iloc[:,count]/max
+        (norm.shift(prePtime,axis=0)*ampDIST+delta).plot(color='gray',alpha=0.5)
+        normsum += norm 
+    normsummax=np.max(normsum)
+    normsumnorm=normsum/normsummax
+    (normsumnorm.shift(prePtime,axis=0)*80).plot(color='black')
+    plt.axvline(x=0,color='black', ls='--', lw=1)
+    plt.ylim(0,80+ampDIST)
+    #plt.xlim(0,600)
+    plt.title('Smoothed Energy Flux (normalized and stacked) [J/s]')
+    plt.xlabel('Time from Theor. P-arrival [s]')
+    plt.ylabel('Distance [°]')
+    plt.savefig('Eflux_Dist_'+eventname+'.png', dpi=150)
+    if show:
+        plt.show()
+
+    # azimuth plot
+    for count in range(nst):
+        az=float(trdf.az[count])
+        max=np.max(dEdt.iloc[:,count])
+        norm=dEdt.iloc[:,count]/max
+        (norm.shift(prePtime,axis=0)*ampAZ+az).plot(color='gray',alpha=0.5)
+        #print(count,delta,np.max(normsum))
+    #plt.show()
+    (normsumnorm.shift(prePtime,axis=0)*360).plot(color='black')
+    plt.axvline(x=0,color='black', ls='--', lw=1)
+    plt.ylim(0,360+ampAZ)
+    #plt.xlim(60,600)
+    plt.title('Smoothed Energy Flux (normalized and stacked) [J/s]')
+    plt.xlabel('Time from Theor. P-arrival [s]')
+    plt.ylabel('Azimuth [°]')
+    plt.savefig('Eflux_Az_'+eventname+'.png', dpi=150)
+    if show:
+        plt.show()
 
 
 ### Below are testing 
