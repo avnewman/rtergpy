@@ -16,8 +16,13 @@ pip install update .
 
 ----
 ## Setup
-Before running any code, go into `rtergpy/run.py` and change the default event and library locations that correspond to your install.
+Before running any code, copy `rtergpy.conf` into your base directory and make any changes to that version for
+code and event directory locations, as well as any other parameters that you want to change for your default runs. 
 
+ `cp rtergpy.conf ~/` 
+ 
+ > Note that program will check `/etc/`, then `~/`, finally the local run directory (`.`) for config files.
+ 
 ----
 ## Run
 Look in the `Examples` and `notebooks` for how to process. 
