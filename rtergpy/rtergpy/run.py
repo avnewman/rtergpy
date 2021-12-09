@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import os
 import matplotlib.pyplot as plt
-
+from configparser import ConfigParser
 
 def etime2name(etime,ecount='00',**kwargs):
     """
@@ -18,54 +18,59 @@ def etime2name(etime,ecount='00',**kwargs):
     return eventname
 
 # Basic parameters for all processing
+
 class defaults:
     def __init__(self):
-        # mac    
-        basedir='/Users/anewman/Documents/Projects/EQerg'
-        self.edirbase=os.path.join(basedir,'rterg_events/events')
-        # linuxbox
-        #basedir='/home/anewman/html/research/RTerg/rterg'
-        #self.edirbase=os.path.join(basedir,'processing/Examples/events')
+        # read config file
+        config = ConfigParser()
+        # read etc, then base (~/), then local (overwriting along the way) 
+        filelocations = ["/etc/rtergpy/", os.path.expanduser("~"), os.curdir ]
+        try: 
+            for dir in filelocations:
+                file=str(os.path.join(dir,'rtergpy.conf'))
+                config.read(file)
+            DEFS = config["DEFAULTS"]
+        except:
+            print("ERROR: Could not find configuration file 'rtergpy.conf'")
+            pass
         
-        self.libdir=os.path.join(basedir,'rterg/rtergpy/rtergpy/libs')
+        self.basedir=DEFS["basedir"]
+        self.edirbase=DEFS["edirbase"]  
+        self.libdir=DEFS["libdir"]
 
-        self.network = "CU,GT,IC,II,IU" # GSN network
-        self.stationrange=[25,80]  # distance in degrees
-        self.chan="BHZ"
+        self.network=DEFS["network"]
+        self.stationrange=[ float(DEFS["statmin"]), float(DEFS["statmax"]) ] #[25,80]  # distance in degrees
+        self.chan=DEFS["chan"]
 
         #site conditions
-        pvel_site=7000.
-        rho_site=3000.
+        pvel_site=float(DEFS["pvel_site"])
+        rho_site=float(DEFS["rho_site"])
         self.siteparams=[pvel_site,rho_site]
         
         # frequency range
-        # BB
-        p1min=0.5; p1max=300;  # period range in seconds
-        f1min=1/p1max ; f1max=1/p1min; # BB
-        # HF
-        p2min=0.5; p2max=2;  # period range in seconds
-        f2min=1/p2max; f2max=1/p2min  # HF
+        f1min=float(DEFS["f1min"]) ; f1max=float(DEFS["f1max"]) # BB
+        f2min=float(DEFS["f2min"]) ; f2max=float(DEFS["f2max"]) # HF 
         fbands=[[f1min,f1max],[f2min,f2max]]
-        tstep=1 # incriment
-        prePtime=-60; postPtime=300
+        tstep=float(DEFS["tstep"]) # increment
+        prePtime=float(DEFS["prePtime"])
+        postPtime=float(DEFS["postPtime"])
         pwindow=[prePtime,postPtime]
         self.waveparams=[fbands,pwindow,tstep]
-        self.resample=10  # samples per second
-        self.smoothkern=10  # kernel for gaussian smoothing of data for duration estimates (1/2 on each side)
+        self.resample=float(DEFS["resample"])  # samples per second
+        self.smoothkern=float(DEFS["smoothkern"])  # kernel for gaussian smoothing of data for duration estimates (1/2 on each side)
 
         # earth params
-        self.rearth=6371e3 # in metes
-        self.qbc=15.6 #q-factor from B&C
-        self.avfpsq=(4/15)
-        self.aob=3**.5  # alpha over beta  (Poisson solid)
+        self.rearth=float(DEFS["rearth"]) # in meters
+        self.qbc=float(DEFS["qbc"]) #q-factor from B&C
+        self.avfpsq=float(DEFS["avfpsq"])
+        self.aob=float(DEFS["aob"])  # alpha over beta  (Poisson solid)
 
         # processing tacers/energy
-        self.cutoff=15  # factor by which to ignore data (values must be between mean/cutoff and mean*cutoff)
+        self.cutoff=float(DEFS["cutoff"])  # factor by which to ignore data (values must be between mean/cutoff and mean*cutoff)
 
         # Waveform source
-        self.src = 'NEIC'  # alternative 'IRIS'
+        self.src = DEFS["f2min"]  # alternative 'IRIS'
     
-
 class event:
     def __init__(self):
         #self.data="Existing"
