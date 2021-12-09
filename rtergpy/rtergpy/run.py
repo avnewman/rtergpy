@@ -51,13 +51,13 @@ class defaults:
         f1min=float(DEFS["f1min"]) ; f1max=float(DEFS["f1max"]) # BB
         f2min=float(DEFS["f2min"]) ; f2max=float(DEFS["f2max"]) # HF 
         fbands=[[f1min,f1max],[f2min,f2max]]
-        tstep=float(DEFS["tstep"]) # increment
-        prePtime=float(DEFS["prePtime"])
-        postPtime=float(DEFS["postPtime"])
+        tstep=int(DEFS["tstep"]) # increment
+        prePtime=int(DEFS["prePtime"])
+        postPtime=int(DEFS["postPtime"])
         pwindow=[prePtime,postPtime]
         self.waveparams=[fbands,pwindow,tstep]
-        self.resample=float(DEFS["resample"])  # samples per second
-        self.smoothkern=float(DEFS["smoothkern"])  # kernel for gaussian smoothing of data for duration estimates (1/2 on each side)
+        self.resample=int(DEFS["resample"])  # samples per second
+        self.smoothkern=int(DEFS["smoothkern"])  # kernel for gaussian smoothing of data for duration estimates (1/2 on each side)
 
         # earth params
         self.rearth=float(DEFS["rearth"]) # in meters
@@ -69,7 +69,7 @@ class defaults:
         self.cutoff=float(DEFS["cutoff"])  # factor by which to ignore data (values must be between mean/cutoff and mean*cutoff)
 
         # Waveform source
-        self.src = DEFS["f2min"]  # alternative 'IRIS'
+        self.src = DEFS["src"]  # alternative 'IRIS'
     
 class event:
     def __init__(self):
