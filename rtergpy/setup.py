@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='rtergpy',
-    version='0.1.1',
+    version='0.2.0',
     description='A package for real-time processing of Earthquake Energy and duration',
     url='https://github.com/avnewman/',
     author='Andrew Newman',
