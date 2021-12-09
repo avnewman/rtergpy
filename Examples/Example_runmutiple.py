@@ -10,22 +10,21 @@ from rtergpy.run import defaults, event, etime2name, src2ergs
 from obspy import UTCDateTime
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib as mpl
-mpl.use('Agg')   # needed to plot without using the X-session
+#import matplotlib as mpl
+#mpl.use('Agg')   # needed to plot without using the X-session
 
 Defaults=defaults()
 Event=event()
-Defaults.src='IRIS'
-Event.newData=True # True is default
+#Defaults.src='IRIS'
+Defaults.src='NEIC'
+Event.newData=False # True is default
 Event.ecount='00'
 edateold=""
 # events older than available in NEIC
 CMTS=pd.read_csv('CMTS_NEIC.txt', sep='\s+', comment="#")  # any amount of whitespace
-#Defaults.src='NEIC'
 #CMTS=pd.read_csv('CMTS.txt', sep='\s+', comment="#")  # any amount of whitespace
 for index, EQ in CMTS.iterrows():
     eloc = [EQ.LAT,EQ.LONG,EQ.DEPTH] 
-    #print(EQ.DATE,EQ.TIME)
     year,mo,dd = EQ.DATE.split('/')
     hh,mn,sec = EQ.TIME.split(':')
     etime=(UTCDateTime(int(year),int(mo),int(dd),int(hh),int(mn),float(sec)))
@@ -42,6 +41,6 @@ for index, EQ in CMTS.iterrows():
     print("\n\n"+Event.eventname+" ===============================")
     #try:
     src2ergs(Defaults=Defaults,Event=Event)  # need to export run output in a coherent way
-    plt.close('all')  # they don't close themselves
+    #plt.close('all')  # they don't close themselves
     #except:
     #    print("ERROR: running on "+Event.eventname+" failed!!!!\n\n")

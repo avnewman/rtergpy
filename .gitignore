@@ -136,6 +136,8 @@ web/v2.0_testing/andy/*.json
 # event files
 events/
 
+# files/directories meant to be kept locally
+local*
 
 # vim backups
 *~

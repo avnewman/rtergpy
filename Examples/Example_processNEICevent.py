@@ -18,6 +18,7 @@ Event=event()
 eloc = [18.56,-73.55,10] 
 etime= UTCDateTime(2021,8,14,12,29,8) 
 Event.ecount='00'
+#Event.newData=False   # use already downloaded data
 Event.newData=True
 Event.eventname=etime2name(etime,ecount=Event.ecount)
 Event.origin=[eloc,etime]

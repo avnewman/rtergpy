@@ -154,9 +154,11 @@ def stationEmapPygmt(E,eloc,trdf,eventname,ttime,prePtime=-60,cutoff=15,itername
     scale=15
     proj="A"+str(eloc[1])+"/"+str(eloc[0])+"/"+str(scale)+"c"
     grid = gmt.datasets.load_earth_relief(resolution="30m")
+#    dgrid = gmt.grdgradient(grid=grid, radiance=[45, 80])
     mapcpt=os.path.join(libdir,'map_gray.cpt')
     with gmt.config(MAP_FRAME_PEN="0.3p,black"):
         fig.grdimage(grid=grid, cmap=mapcpt, shading=True, projection=proj)
+#        fig.grdimage(grid=dgrid, cmap=mapcpt, projection=proj)
         fig.coast(shorelines="0.2p,50", area_thresh=100000, frame="afg30", projection=proj)
 
 # background earthquakes
@@ -197,7 +199,7 @@ def stationEmapPygmt(E,eloc,trdf,eventname,ttime,prePtime=-60,cutoff=15,itername
 # plot stations with relative energy
     gmt.makecpt(cmap="split",background="True", continuous="True", series=[-1,1,0.5])
     fig.plot(x=lons,y=lats,style='t0.5c', color=enorm, cmap=True, pen="0.5,white",transparency=20)
-    fig.colorbar(position="13.7/0.2+w2.5c/0.2c+v")
+    fig.colorbar(position="x13.7/0.2+w2.5c/0.2c+v")
 
 # plot event location in center
     fig.plot(x=eloc[1],y=eloc[0], style="a0.85c",color="green",pen="1p,black", transparency=50)

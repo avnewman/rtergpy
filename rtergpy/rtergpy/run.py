@@ -83,7 +83,7 @@ class event:
         phi,delta,lmbda=[70, 20, 90]
         self.focmech=[phi,delta,lmbda]
 
-def src2ergs(Defaults=defaults(), Event=event(), **kwargs):
+def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     """
     Run event processing from data retrieval to final results with plots saved in appropriate directories.  
     Heavy-lifting is performed by the classes (Defaults, and Event), so please be sure to locally define before running. 
@@ -108,12 +108,9 @@ def src2ergs(Defaults=defaults(), Event=event(), **kwargs):
     from rtergpy.waveforms import getwaves,ErgsFromWaves,loadwaves,gmeanCut,tacer,tacerstats
     from rtergpy.waveforms import trstat2pd,e2Me,eventdir
     from rtergpy.plotting import tacerplot,Edistplot,Ehistogram,Eazplot, stationEmapPygmt, fbandlabels, Efluxplots
-    #from rtergpy.run import defaults, event, etime2name
-    #from obspy import UTCDateTime
-    #from tqdm import tqdm
     import numpy as np
     import pandas as pd
-    #import matplotlib.pyplot as plt
+    import matplotlib as mpl
     import os
     
     eventname=Event.eventname
@@ -280,16 +277,21 @@ def src2ergs(Defaults=defaults(), Event=event(), **kwargs):
 
     # Create plots
     try:
+        print("Making figures\n")
         if not os.path.exists('figs'):   # create and go into pkls dir
             os.mkdir('figs')
         os.chdir('figs')
-        Efluxplots(dEHFdtSmooth, trdf, eventname)    
-        tacerplot(tacerHF,trdf,ttimes,meds,eventname,show=False)
-        Edistplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=False,cutoff=cutoff)
-        Eazplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=False,cutoff=cutoff)
-        Ehistogram(EBB,EHF,Emd,eventname,ttimeHF, prePtime=prePtime,show=False,cutoff=cutoff)
-        stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=False)
+        if not showPlots:
+            mpl.use('Agg')  # needed to plot without using the X-session
+        # individual plot runs    
+        Efluxplots(dEHFdtSmooth, trdf, eventname, show=showPlots)    
+        tacerplot(tacerHF,trdf,ttimes,meds,eventname,show=showPlots)
+        Edistplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
+        Eazplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
+        Ehistogram(EBB,EHF,Emd,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
+        stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=showPlots)
         os.chdir('..')
+        mpl.pyplot.close('all')  # they don't close themselves
     except:
         print("ERROR: plotting results for "+eventname)
 

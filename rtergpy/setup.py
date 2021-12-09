@@ -2,14 +2,14 @@ from setuptools import setup
 
 setup(
     name='rtergpy',
-    version='0.1.0',
+    version='0.1.1',
     description='A package for real-time processing of Earthquake Energy and duration',
     url='https://github.com/avnewman/',
     author='Andrew Newman',
     author_email='anewman@gatech.edu',
     license='MIT',
     packages=['rtergpy'],
-    install_requirements=['pygmt>=0.4.1', 
+    install_requirements=['pygmt>=0.3.1', 
                         'numpy>=1.0',
                         'matplotlib>=3.3.0',
                         'tqdm',
