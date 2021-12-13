@@ -12,12 +12,29 @@ import matplotlib.pyplot as plt
 def fbandlabels(Emd):
     fbb=Emd.fbandBB[0]
     fhf=Emd.fbandHF[0]
+    
     if  fbb[0] < 0.00001:
         fminbblabel="0"
     else :
         fminbblabel=str("1/"+str(int(1/fbb[0])))
-    labelbb=fminbblabel+" - "+str(int(fbb[1]))+" Hz"
-    labelhf="1/"+str(int(1/fhf[0]))+" - "+str(int(fhf[1]))+" Hz"
+    if fbb[1] < 1 :
+        fmaxbblabel=str("1/"+str(int(1/fbb[1])))
+    else:
+        fmaxbblabel=str(int(fbb[1]))
+    
+    if  fhf[0] < 0.00001:
+        fminhflabel="0"
+    elif fhf[0] < 1 :
+        fminhflabel=str("1/"+str(int(1/fhf[0])))
+    else :
+        fminhflabel=str(int(fhf[0]))
+    if fhf[1] < 1 :
+        fmaxhflabel=str("1/"+str(int(1/fhf[1])))
+    else:
+        fmaxhflabel=str(int(fhf[1]))
+    
+    labelbb=fminbblabel+" - "+fmaxbblabel+" Hz"
+    labelhf=fminhflabel+" - "+fmaxhflabel+" Hz"
     return labelbb,labelhf
 
 def tacerplot(tacer,trdf,ttimes,meds,eventname,amp=50,show=True, **kwargs):
@@ -219,7 +236,83 @@ def stationEmapPygmt(E,eloc,trdf,eventname,ttime,prePtime=-60,cutoff=15,itername
     if show:
         fig.show()
 
-def Efluxplots(dEdt,trdf,eventname, prePtime=-60, ampDIST=10, ampAZ=30, show=True, **kwargs):
+def fracpostID(df,frac=0.5, **kwargs):
+    iMax=df[df.eq(1)].index[0]
+    PostiMax=df.iloc[iMax:] 
+    ltfrac=PostiMax[PostiMax.lt(frac)]
+    return ltfrac.index[0]
+
+def Efluxplots(dEdt,trdf,eventname, prePtime=-60, stationrange=Defaults.stationrange, ampDIST=5, ampAZ=30, pcts=[0.5,0.25,0.1], show=True, **kwargs):
+    plt.subplots(figsize=(12,12), facecolor='white')
+    plt.subplot(3, 1,1)
+    npts=len(dEdt.iloc[:,0]) # N time-series points
+    nst=len(dEdt.iloc[0])  # N stations
+    normsum=pd.Series(np.zeros(npts))
+    Deltamin=stationrange[0]
+    Deltamax=stationrange[1]
+
+    for count in range(nst):
+        delta=float(trdf.distance[count][1])
+        max=np.max(dEdt.iloc[:,count])
+        norm=(dEdt.iloc[:,count]/max).clip(lower=0) # don't allow negative values to creep in for missing/strange data 
+        (norm.shift(prePtime,axis=0)*ampDIST+delta).plot(color='gray',alpha=0.5)
+        normsum += norm.clip(lower=0)  
+    normsummax=np.max(normsum)
+    normsumnorm=normsum/normsummax
+    #(Deltamin+normsumnorm.shift(prePtime,axis=0)*(Deltamax-Deltamin)).plot(color='black')
+    plt.axvline(x=0,color='black', ls='--', lw=1)
+    plt.ylim(Deltamin,Deltamax+ampDIST)
+    plt.title('Smoothed Energy Flux (normalized and stacked) [J/s]')
+    #plt.xlabel('Time from Theor. P-arrival [s]')
+    plt.gca().xaxis.grid(True)
+    plt.ylabel('Distance [°]')
+    
+    # azimuth plot
+    plt.subplot(3, 1,2)
+    for count in range(nst):
+        az=float(trdf.az[count])
+        max=np.max(dEdt.iloc[:,count])
+        norm=(dEdt.iloc[:,count]/max).clip(lower=0) # avoid negs as above
+        (norm.shift(prePtime,axis=0)*ampAZ+az).plot(color='gray',alpha=0.5)
+    plt.axvline(x=0,color='black', ls='--', lw=1)
+    #(normsumnorm.shift(prePtime,axis=0)*360).plot(color='black')
+    plt.ylim(0,360+ampAZ)
+ #   plt.xlabel('Time from Theor. P-arrival [s]')
+    plt.ylabel('Azimuth [°]')
+    plt.tight_layout()
+    plt.gca().xaxis.grid(True)
+    
+    # stacked solution
+    plt.subplot(3,1,3)
+    for count in range(nst):
+        az=float(trdf.az[count])
+        max=np.max(dEdt.iloc[:,count])
+        norm=dEdt.iloc[:,count]/max
+        (norm.shift(prePtime,axis=0)).plot(color='gray',alpha=0.3)
+        
+    plt.axvline(x=0,color='black', ls='--', lw=1)
+    (normsumnorm.shift(prePtime,axis=0)).plot(color='black')
+
+    #pcts=[0.1,0.2,0.5] # list of fractions
+    droptimes=[]
+    for pct in pcts:
+        droptime=fracpostID(normsumnorm,frac=pct)+prePtime
+        droptimes.append(droptime)
+        plt.axvline(x=droptime,color='black', ls='-.', lw=1 )
+        plt.text(droptime,1, str(droptime)+' @ '+str(pct)+' max', rotation=90, va='top', ha='right', bbox=dict(boxstyle='round',facecolor='white', alpha=0.4))
+
+    plt.ylim(0,1.05)
+    plt.xlabel('Time from Theor. P-arrival [s]')
+    plt.ylabel('Stacked E-flux')
+    plt.tight_layout()
+ 
+    plt.gca().xaxis.grid(True)
+    plt.savefig('Eflux_Dist-Az_'+eventname+'.png', dpi=150)
+    if show:
+        plt.show()
+    return droptimes
+
+def Efluxplots_old(dEdt,trdf,eventname, prePtime=-60, ampDIST=10, ampAZ=30, show=True, **kwargs):
     npts=len(dEdt.iloc[:,0]) # N time-series points
     nst=len(dEdt.iloc[0])  # N stations
     normsum=pd.Series(np.zeros(npts))

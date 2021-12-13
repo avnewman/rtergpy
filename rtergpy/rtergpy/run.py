@@ -262,6 +262,30 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     ETace=ETace.reset_index(drop=True)
     StationTacer=pd.concat([trdf,Emd[["estFgP2","FgP2","est2corr"]],ETace],axis=1)
 
+    # Create plots
+    try:
+        print("Making figures\n")
+        if not os.path.exists('figs'):   # create and go into pkls dir
+            os.mkdir('figs')
+        os.chdir('figs')
+        if not showPlots:
+            mpl.use('Agg')  # needed to plot without using the X-session
+        # individual plot runs    
+        droppcts=[0.5,.25,0.1]
+        droptimes=Efluxplots(dEHFdtSmooth, trdf, eventname, pcts=droppcts, show=showPlots)    
+        print(droptimes)
+        tacerplot(tacerHF,trdf,ttimes,meds,eventname,show=showPlots)
+        Edistplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
+        Eazplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
+        Ehistogram(EBB,EHF,Emd,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
+        stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=showPlots)
+        os.chdir('..')
+        mpl.pyplot.close('all')  # they don't close themselves
+    except:
+        print("ERROR: plotting results for "+eventname)
+
+    results["Droptimes"]=[droptimes]
+
     # save results to files
     try:
         print("writing results\n")
@@ -280,25 +304,6 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     except:
         print("ERROR: writing results for"+eventname)
 
-    # Create plots
-    try:
-        print("Making figures\n")
-        if not os.path.exists('figs'):   # create and go into pkls dir
-            os.mkdir('figs')
-        os.chdir('figs')
-        if not showPlots:
-            mpl.use('Agg')  # needed to plot without using the X-session
-        # individual plot runs    
-        Efluxplots(dEHFdtSmooth, trdf, eventname, show=showPlots)    
-        tacerplot(tacerHF,trdf,ttimes,meds,eventname,show=showPlots)
-        Edistplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
-        Eazplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
-        Ehistogram(EBB,EHF,Emd,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
-        stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=showPlots)
-        os.chdir('..')
-        mpl.pyplot.close('all')  # they don't close themselves
-    except:
-        print("ERROR: plotting results for "+eventname)
 
     os.chdir(origwd)  # go back to old directory
 
