@@ -135,8 +135,8 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
         try:
             st,df=loadwaves(Defaults=Defaults,Event=Event) 
         except:
-            print("Couldn't load data for "+eventname+". Quitting.")
-            exit(1)
+            print("Couldn't load data for "+eventname+". Attempting to download:")
+            st,df=getwaves(Defaults=Defaults,Event=Event)
     if len(st) == 0:
         raise Exception("ERROR: No waveforms retreived.") 
     #runiter= iterate()
