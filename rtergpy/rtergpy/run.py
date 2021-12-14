@@ -88,6 +88,12 @@ class event:
         phi,delta,lmbda=[70, 20, 90]
         self.focmech=[phi,delta,lmbda]
 
+        #additional event info either determined or brought in
+        self.Mw=0
+        self.Me=0
+        self.ttime=0
+
+
 def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     """
     Run event processing from data retrieval to final results with plots saved in appropriate directories.  
@@ -262,7 +268,10 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     ETace=ETace.reset_index(drop=True)
     StationTacer=pd.concat([trdf,Emd[["estFgP2","FgP2","est2corr"]],ETace],axis=1)
 
-    # Create plots
+    Event.Me=e2Me(ebbpertacmean)
+    Event.ttime=ttimeHF
+
+    # Create plots  
     try:
         print("Making figures\n")
         if not os.path.exists('figs'):   # create and go into pkls dir
@@ -272,8 +281,7 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
             mpl.use('Agg')  # needed to plot without using the X-session
         # individual plot runs    
         droppcts=[0.5,.25,0.1]
-        droptimes=Efluxplots(dEHFdtSmooth, trdf, eventname, pcts=droppcts, show=showPlots)    
-        print(droptimes)
+        droptimes=Efluxplots(dEHFdtSmooth, trdf, Event=Event, Defaults=Defaults, pcts=droppcts, show=showPlots)    
         tacerplot(tacerHF,trdf,ttimes,meds,eventname,show=showPlots)
         Edistplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
         Eazplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)

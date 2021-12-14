@@ -396,8 +396,8 @@ def getwaves(Defaults=Defaults, Event=Event, **kwargs):
     from obspy.core.stream import Stream
     from rtergpy.run import etime2name
     import os
-    import shutil
     import pandas as pd
+    import pickle
 
     eloc=Event.origin[0]
     etime=Event.origin[1]
@@ -441,10 +441,11 @@ def getwaves(Defaults=Defaults, Event=Event, **kwargs):
         print("ERROR:   writing",dfpathfilepk,"\n",dfpathfilecsv)
 
     # data raw and processesd
-    stpathfile=os.path.join(ediritpkl, "Wavestream-raw_"+eventname+".pkl.gz")
-    try:
-        cpkldump(st,stpathfile, compression="gzip")
+    stpathfile=os.path.join(ediritpkl, "Wavestream-raw_"+eventname+".pkl")
+    try: 
         print("writing ",stpathfile)
+        with open(stpathfile, 'wb') as file:
+            pickle.dump(st,file)
     except:
         print("ERROR:   writing ",stpathfile)
     return st,df 
@@ -453,6 +454,7 @@ def loadwaves(Defaults=Defaults, Event=Event, **kwargs):
     """
     loads existing waveform info
     """
+    import pandas as pd
     eventname=Event.eventname
     edirbase=Defaults.edirbase
     runiter=str(Event.iter)
@@ -460,11 +462,17 @@ def loadwaves(Defaults=Defaults, Event=Event, **kwargs):
     edir=os.path.join(edirbase,str(eyr),eventname) # event directory
     ediritpkl=os.path.join(edir,runiter,"pkls")
     # load data 
-    stpathfile=os.path.join(ediritpkl, "Wavestream-raw_"+eventname+".pkl.gz")
-    st=pd.read_pickle(stpathfile, compression="gzip")
-    # load metadata
-    dfpathfilepk=os.path.join(ediritpkl, "Params_"+eventname+".pkl")
-    df=pd.read_pickle(dfpathfilepk)
+    for file in os.listdir(ediritpkl):
+        fpath=os.path.join(ediritpkl,file)
+        # raw data load
+        if file.startswith('Wavestream-raw_'+eventname):    
+            if file.endswith('pkl'):
+                st=pd.read_pickle(fpath)     
+            elif file.endswith('pkl.gz'):
+                st=pd.read_pickle(fpath, compression='gzip')     
+        # load metadata
+        if file.startswith("Params_"+eventname):
+            df=pd.read_pickle(fpath)
     return st,df
 
 def wave2energytinc(tr,Defaults=Defaults, Event=Event, fband=Defaults.waveparams[0][0], **kwargs):

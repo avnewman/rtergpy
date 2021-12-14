@@ -5,7 +5,8 @@ import os
 import numpy as np
 import pandas as pd
 from rtergpy.waveforms import gmeanCut,tacerstats
-from rtergpy.run import defaults
+from rtergpy.run import defaults,event
+Event=event()
 Defaults=defaults()
 import matplotlib.pyplot as plt
 
@@ -242,14 +243,23 @@ def fracpostID(df,frac=0.5, **kwargs):
     ltfrac=PostiMax[PostiMax.lt(frac)]
     return ltfrac.index[0]
 
-def Efluxplots(dEdt,trdf,eventname, prePtime=-60, stationrange=Defaults.stationrange, ampDIST=5, ampAZ=30, pcts=[0.5,0.25,0.1], show=True, **kwargs):
+def Efluxplots(dEdt, trdf, Event=event(), Defaults=defaults(), ampDIST=5, ampAZ=30, pcts=[0.5,0.25,0.1], show=True, **kwargs):
+    from obspy import UTCDateTime
+    #UTCDateTime.DEFAULT_PRECISION=1
+
+    eventname=Event.eventname
+    eloc, etime=Event.origin
+    prePtime,postPtime=Defaults.waveparams[1]
+    nst=len(dEdt.iloc[0])  # N stations
+    npts=postPtime-prePtime # N time-series points
+    xmax=postPtime
+ 
+ # distance plot (top)
     plt.subplots(figsize=(12,12), facecolor='white')
     plt.subplot(3, 1,1)
-    npts=len(dEdt.iloc[:,0]) # N time-series points
-    nst=len(dEdt.iloc[0])  # N stations
+    
     normsum=pd.Series(np.zeros(npts))
-    Deltamin=stationrange[0]
-    Deltamax=stationrange[1]
+    Deltamin,Deltamax=Defaults.stationrange
 
     for count in range(nst):
         delta=float(trdf.distance[count][1])
@@ -266,7 +276,14 @@ def Efluxplots(dEdt,trdf,eventname, prePtime=-60, stationrange=Defaults.stationr
     #plt.xlabel('Time from Theor. P-arrival [s]')
     plt.gca().xaxis.grid(True)
     plt.ylabel('Distance [°]')
-    
+   
+    timestr="%4d/%02d/%02d %02d:%02d:%04.1f" % (etime.year,etime.month,etime.day,etime.hour,etime.minute,etime.second)
+    locstr="%.2f°, %.2f°, %.1f km" % (eloc[0],eloc[1],eloc[2])
+    magstr="Mw=%.1f, Me=%.1f, T_tac=%d s" % (Event.Mw, Event.Me, Event.ttime)
+    plt.text(xmax,(Deltamax+ampDIST)*.98, magstr +': '+timestr+' @ '+locstr, 
+        va='top', ha='right', size='medium',
+        bbox=dict(boxstyle='round',facecolor='white', alpha=0.8))
+
     # azimuth plot
     plt.subplot(3, 1,2)
     for count in range(nst):

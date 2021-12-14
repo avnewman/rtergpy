@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='rtergpy',
-    version='0.2.0',
+    version='0.2.2',
     description='A package for real-time processing of Earthquake Energy and duration',
     url='https://github.com/avnewman/',
     author='Andrew Newman',
@@ -15,7 +15,6 @@ setup(
                         'tqdm',
                         'obspy>=1.2.0',
                         'pandas>=1.2.0'
-                        'compress-pickle>=2.0.0'
                         ],
     classifiers=[ 
         'Development Status :: 2 - Beta',
