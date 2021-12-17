@@ -3,7 +3,7 @@ Once you're in the proper environment, for me it is done by:
 ``` 
 conda activate rterg
 ```
-Install by going into this directory `rtergpy` and using pip:
+Install by going into this directory `rtergpy` (directory with `setup.py`) and using pip:
 ```
 pip install .
 ```
@@ -21,7 +21,7 @@ code and event directory locations, as well as any other parameters that you wan
 
  `cp rtergpy.conf ~/` 
  
- > Note that program will check `/etc/`, then `~/`, finally the local run directory (`.`) for config files.
+ > Note that program will check `/etc/`, then `~/`, finally the local run directory (`.`) for config files, overriding configuration details along the way. Thus, directory specific configurations will always supercede prior configs.
  
 ----
 ## Run
