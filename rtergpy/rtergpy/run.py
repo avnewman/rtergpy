@@ -6,7 +6,7 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import os
-import matplotlib.pyplot as plt
+import matplotlib
 from configparser import ConfigParser
 
 def etime2name(etime,ecount='00',**kwargs):
@@ -33,7 +33,10 @@ class defaults:
         except:
             print("ERROR: Could not find configuration file 'rtergpy.conf'")
             pass
-        
+       
+        if DEFS["USEAGG"]:   # set no display
+            matplotlib.use("AGG")  
+
         self.basedir=DEFS["basedir"]
         self.edirbase=DEFS["edirbase"]  
         self.libdir=DEFS["libdir"]

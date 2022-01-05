@@ -9,9 +9,6 @@ It took 10.25 minutes to process 17 events including pulling data from NEIC (the
 from rtergpy.run import defaults, event, etime2name, src2ergs
 from obspy import UTCDateTime
 import pandas as pd
-import matplotlib.pyplot as plt
-#import matplotlib as mpl
-#mpl.use('Agg')   # needed to plot without using the X-session
 
 Defaults=defaults()
 Event=event()
@@ -22,7 +19,7 @@ Event.ecount='00'
 edateold=""
 # events older than available in NEIC
 CMTS=pd.read_csv('CMTS_NEIC.txt', sep='\s+', comment="#")  # any amount of whitespace
-#CMTS=pd.read_csv('CMTS.txt', sep='\s+', comment="#")  # any amount of whitespace
+CMTS=pd.read_csv('temp.txt', sep='\s+', comment="#")  # any amount of whitespace
 for index, EQ in CMTS.iterrows():
     eloc = [EQ.LAT,EQ.LONG,EQ.DEPTH] 
     year,mo,dd = EQ.DATE.split('/')
@@ -41,6 +38,5 @@ for index, EQ in CMTS.iterrows():
     print("\n\n"+Event.eventname+" ===============================")
     #try:
     src2ergs(Defaults=Defaults,Event=Event)  # need to export run output in a coherent way
-    #plt.close('all')  # they don't close themselves
     #except:
     #    print("ERROR: running on "+Event.eventname+" failed!!!!\n\n")
