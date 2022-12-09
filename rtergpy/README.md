@@ -1,3 +1,14 @@
+# About
+
+This github provides`rtergpy`; a set of python codes for the calculation of the radiated seismic energy as determined at the approximated termination of earthquake rupture.   
+
+The code is modified signficantly from the original FORTRAN development for the Energy/Moment Ratio parameter (Theta parameter) as described in [Newman and Okal (1998)](http://geophysics.eas.gatech.edu/people/anewman/research/papers/Newman_Okal_JGR_1998.pdf).  
+The code now calculates the per-second energy change as determined per station ([Convers and Newman, (2011)](http://geophysics.eas.gatech.edu/people/anewman/research/papers/Convers_Newman_JGR_2011.pdf)), and the total energy
+radiated at the maximum in the Time-Averaged Cumulative Energy Rate (TACER) as decribed in [Convers and Newman (2013)](http://geophysics.eas.gatech.edu/people/anewman/research/papers/Convers_Newman_GRL_2013.pdf).
+
+
+A paper describing this new code is forthcoming.
+
 ## Install 
 Once you're in the proper environment, for me it is done by:
 ``` 
