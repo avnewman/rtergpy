@@ -13,6 +13,7 @@ from obspy import UTCDateTime
 Defaults=defaults()
 Event=event()
 
+Defaults.src='IRIS'
 # 2021 Haiti EQ *Mw 7.2)
 # 21081402 2021/08/14 12:29:08  18.56  -73.55   10.0
 eloc = [18.56,-73.55,10] 
