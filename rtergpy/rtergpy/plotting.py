@@ -215,12 +215,13 @@ def stationEmapPygmt(E,eloc,trdf,eventname,ttime,prePtime=-60,cutoff=15,itername
         lats.append(coords[0])
 
 # plot stations with relative energy
-    gmt.makecpt(cmap="split",background="True", continuous="True", series=[-1,1,0.5])
-    fig.plot(x=lons,y=lats,style='t0.5c', color=enorm, cmap=True, pen="0.5,white",transparency=20)
+    #gmt.makecpt(cmap="split",background="True", continuous="True", series=[-1,1,0.5])
+    gmt.makecpt(cmap="split",background="True", series=[-1,1,0.25])
+    fig.plot(x=lons,y=lats,style='t0.5c', fill=enorm, cmap=True, pen="0.5,white",transparency=20)
     fig.colorbar(position="x13.7/0.2+w2.5c/0.2c+v")
 
 # plot event location in center
-    fig.plot(x=eloc[1],y=eloc[0], style="a0.85c",color="green",pen="1p,black", transparency=50)
+    fig.plot(x=eloc[1],y=eloc[0], style="a0.85c",fill="green",pen="1p,black", transparency=50)
 
 # add text
     with gmt.config(MAP_FRAME_PEN="0,white"):

@@ -22,6 +22,7 @@ If there are any dependencies needed, you may need to install these first.
 
 ### Update
 ```
+# remember to be in the `setup.py` directory
 pip install update .
 ```
 
