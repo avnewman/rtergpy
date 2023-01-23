@@ -26,6 +26,11 @@ If there are any dependencies needed, you may need to install these first.
 pip install update .
 ```
 
+### Run in 'Edit' Mode
+```
+# Allowing edits to programs to automatically become loaded
+pip install -e .
+```
 ----
 ## Setup
 Before running any code, copy `rtergpy.conf` into your base directory and make any changes to that version for
