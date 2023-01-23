@@ -34,8 +34,8 @@ class defaults:
             print("ERROR: Could not find configuration file 'rtergpy.conf'")
             pass
        
-        if DEFS["USEAGG"]:   # set no display
-            matplotlib.use("AGG")  
+       # if DEFS["USEAGG"]:   # set no display
+       #     matplotlib.use("AGG")  
 
         self.basedir=DEFS["basedir"]
         self.edirbase=DEFS["edirbase"]  
@@ -50,7 +50,7 @@ class defaults:
         rho_site=float(DEFS["rho_site"])
         self.siteparams=[pvel_site,rho_site]
         
-        # frequency range
+        # frequency range and other waveform params
         f1min=float(DEFS["f1min"]) ; f1max=float(DEFS["f1max"]) # BB
         f2min=float(DEFS["f2min"]) ; f2max=float(DEFS["f2max"]) # HF 
         fbands=[[f1min,f1max],[f2min,f2max]]
@@ -58,6 +58,7 @@ class defaults:
         prePtime=int(DEFS["prePtime"])
         postPtime=int(DEFS["postPtime"])
         pwindow=[prePtime,postPtime]
+        self.snr=float(DEFS["snr"])
         self.waveparams=[fbands,pwindow,tstep]
         self.resample=int(DEFS["resample"])  # samples per second
         self.smoothkern=int(DEFS["smoothkern"])  # kernel for gaussian smoothing of data for duration estimates (1/2 on each side)
@@ -70,6 +71,8 @@ class defaults:
 
         # processing tacers/energy
         self.cutoff=float(DEFS["cutoff"])  # factor by which to ignore data (values must be between mean/cutoff and mean*cutoff)
+        self.snr=float(DEFS["snr"])  # minimum signal to noise ratio for processing
+        self.pre_filt= (float(DEFS["pflp0"]), float(DEFS["pflp1"]), float(DEFS["pfhp1"]), float(DEFS["pfhp0"])) # low pass complete, low pass begin, high pass begin, high pass complete
 
         # Waveform source
         self.src = DEFS["src"]  # alternative 'IRIS'
@@ -148,10 +151,18 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
         # runiter.step() increases iteration by 1
 
 # remove any additional locations at same site (or site repeats!)
+    prePtime=Defaults.waveparams[1][0]
     STATCHAN0=''
     for tr in st:
         STATCHAN=str(tr.stats.network)+str(tr.stats.station)
-        if STATCHAN == STATCHAN0:
+        trWindow=UTCDateTime(tr.stats.endtime)-UTCDateTime(tr.stats.starttime)
+        nDataExpected=trWindow*tr.stats.sampling_rate+1
+
+        if STATCHAN == STATCHAN0:  # multiple sensors at same location
+            st.remove(tr)
+        elif trWindow <  0-prePtime:  # too short a window (prePtime is negative)
+            st.remove(tr)
+        elif tr.stats.npts < nDataExpected:  # less data than expected
             st.remove(tr)
         STATCHAN0=STATCHAN
 
@@ -179,7 +190,6 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     dEHFdt=EHF.diff()
     dEHFdtSmooth=EHFSmooth.diff()
 
-    prePtime=Defaults.waveparams[1][0]
     tacerBB=tacer(dEBBdtSmooth,prePtime=prePtime)
     tacerHF=tacer(dEHFdtSmooth,prePtime=prePtime)
     ttimes,meds = tacerstats(tacerHF) 
@@ -275,27 +285,28 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     Event.ttime=ttimeHF
 
     # Create plots  
+    
+    print("Making figures\n")
+    if not os.path.exists('figs'):   # create and go into pkls dir
+        os.mkdir('figs')
+    os.chdir('figs')
     try:
-        print("Making figures\n")
-        if not os.path.exists('figs'):   # create and go into pkls dir
-            os.mkdir('figs')
-        os.chdir('figs')
         if not showPlots:
             mpl.use('Agg')  # needed to plot without using the X-session
         # individual plot runs    
         droppcts=[0.5,.25,0.1]
         droptimes=Efluxplots(dEHFdtSmooth, trdf, Event=Event, Defaults=Defaults, pcts=droppcts, show=showPlots)    
+        results["Droptimes"]=[droptimes]
         tacerplot(tacerHF,trdf,ttimes,meds,eventname,show=showPlots)
         Edistplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
         Eazplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
         Ehistogram(EBB,EHF,Emd,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
         stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=showPlots)
-        os.chdir('..')
         mpl.pyplot.close('all')  # they don't close themselves
     except:
-        print("ERROR: plotting results for "+eventname)
+        print("ERROR: Plotting Results for "+eventname) # test 
 
-    results["Droptimes"]=[droptimes]
+    os.chdir('..')
 
     # save results to files
     try:
@@ -321,9 +332,11 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 def mergeResults(Defaults=defaults(), iteration='00', **kwargs):
     """
     Reads all processed event information and returns a master dataframe of summary result information
-    """
+    """ 
     import glob
     import pandas as pd
+    
+    
     files= glob.glob(Defaults.edirbase +'/[12]???/[12]*/'+iteration+'/pkls/Results*.pkl')
     prior='' 
     for file in files:

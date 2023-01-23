@@ -1,3 +1,4 @@
+from locale import setlocale
 from obspy.core.stream import Stream
 from obspy.clients.neic import Client as nClient
 from obspy.clients.fdsn import Client as fdsnClient
@@ -73,24 +74,24 @@ def theorPinfo(eloc,etime,sloc):
     return  ptime,toa,rayp,inc,distdeg
 
 
-def get_respinv(network,eloc,etime,rads,chan):
+def get_respinv(network,eloc,etime,rads,chan,src="IRIS",**kwargs):
     """
     Algorithm to use Obspy's metadata to pull response and other metadata.  Returns an apporpiate
     inventory class.
     A.V. Newman Mon Jul 26 15:26:35 EDT 2021
     """
-    fclient = fdsnClient()
+    client = fdsnClient(src)
 
     elat,elon,edep = eloc
     minrad,maxrad = rads 
     
-    inventory = fclient.get_stations(network = network, 
+    inventory = client.get_stations(network = network, 
             latitude = elat, longitude = elon, 
             minradius = minrad, maxradius = maxrad, 
             starttime=etime-86400, endtime=etime,
             channel=chan,
             #location="00",
-            matchtimeseries=True,
+            #matchtimeseries=True, # may not work if client is not iris
             #filename="test.txt", format="text",  # cannot be used with response
             #filename="test.xml", format="xml",
             level="response"
@@ -109,9 +110,9 @@ def downloadwaves(inventory,eloc,etime,pwindow=Defaults.waveparams[1],src=Defaul
     if src == 'NEIC':
         print("Getting waves from NEIC")
         nclient=nClient()
-    #elif src == 'ISC':
-    #    print("Getting waves from ISC")
-    #    fclient=fdsnClient("ISC")
+    elif src == 'RASPISHAKE':
+        print("Getting waves from RASPISHAKE")
+        rsclient=fdsnClient("RASPISHAKE")
     else:
         print("Getting waves from IRIS")
         fclient=fdsnClient("IRIS")
@@ -124,14 +125,18 @@ def downloadwaves(inventory,eloc,etime,pwindow=Defaults.waveparams[1],src=Defaul
         sheight=sz-sldep
         sloc=slat,slon,sheight
         Ptime,Ptoa,Prayp,Pinc,distdeg=theorPinfo(eloc,etime,sloc)
+        StartTime=Ptime+pwindow[0]
+        EndTime=Ptime+pwindow[1]
         distmeters,az,baz=ll2az(eloc[0],eloc[1],slat,slon)
         neti,stati,loci,chani=chan.split(".")
         stlocal='' # start with empty field in case first wave fails
         try:
             if src == 'NEIC':
-                stlocal=nclient.get_waveforms(neti,stati,loci,chani,Ptime+pwindow[0],Ptime+pwindow[1])
+                stlocal=nclient.get_waveforms(neti,stati,loci,chani,StartTime,EndTime)
+            elif src == 'RASPISHAKE':
+                stlocal=rsclient.get_waveforms(neti,stati,loci,chani,starttime=StartTime, endtime=EndTime) 
             else:
-                stlocal=fclient.get_waveforms(neti,stati,loci,chani,Ptime+pwindow[0],Ptime+pwindow[1], minimumlength=120, longestonly=True)
+                stlocal=fclient.get_waveforms(neti,stati,loci,chani,StartTime,EndTime, minimumlength=120, longestonly=True)
             #print("%s.%s.%s.%s downloaded. Continuing.." %(neti,stati,loci,chani))
         except:
             print("%s.%s.%s.%s failed to download. Continuing.." %(neti,stati,loci,chani))
@@ -410,14 +415,38 @@ def getwaves(Defaults=Defaults, Event=Event, **kwargs):
     pwindow=Defaults.waveparams[1]
     edirbase=Defaults.edirbase
     src=Defaults.src
+    snrthreshold=float(Defaults.snr)
+    pre_filt=Defaults.pre_filt
 
     edirit,origwd=eventdir(Defaults=Defaults,Event=Event,create=True,cd=True)
     print("Checking for stations available within range from IRIS")
-    inventory = get_respinv(network,eloc,etime,rads,chan) # from fsdn
-    #print("Pulling Waveforms from NEIC")
+    inventory = get_respinv(network,eloc,etime,rads,chan,src=src) # defaults to IRIS
     st = downloadwaves(inventory, eloc, etime, pwindow,src=src)  # stream
     if len(st) == 0:
         raise ValueError("ERROR: No waveforms obtained.") 
+    total = 0
+    kept = 0
+    stlocal = Stream()
+    rPtime = -float(pwindow[0])
+    print("rPtime = ",rPtime)
+    for tr in st:
+        total += 1
+        trfilt=tr.copy()
+        trfilt.remove_response(output = 'VEL', pre_filt = pre_filt)
+        # may remove
+        trfilt.detrend('demean')           # preprocess data
+        trfilt.detrend('linear')
+        trfilt.detrend('demean')           # preprocess data
+
+        snrtr = signal2noise(trfilt, rPtime=rPtime, window=rPtime/2)
+        print("Trace SNR = ", snrtr, total)
+        if snrtr >= snrthreshold:
+            sttemp = Stream(traces=[tr])
+            stlocal += sttemp
+            kept += 1
+    st = stlocal 
+    print(kept," of ",total,"traces were kept above SNR threshold", snrthreshold)
+
     now=UTCDateTime()
     # metadata I want to save for later. note, anything that is a list neds to be within brackets  
     df=pd.DataFrame({"eventname":eventname,"iteration":runiter,"etime":etime,"eloc":[eloc],
@@ -675,6 +704,31 @@ def tacerstats(tacer):
     df=pd.merge(maxtacer,maxtacertime,right_index=True,left_index=True)
 
     return [med,m25,m75], df
+
+def signal2noise(tr, rPtime=60, window=10,**kwargs):
+    #rPtime is relative time of P arrival to the beginning of the window [s]
+    #window is size of window for calculating the pre-P noise and post P [s]  
+    sps=int(tr.stats.sampling_rate)
+    vel=tr.data   
+    vel_square = np.square(vel)
+    
+    if window < rPtime:
+        #noise before event 
+        swin=int((rPtime/2-window/2)*sps-1)      
+        ewin=int(swin+window*sps-1)
+        noise = np.mean(vel_square[swin:ewin])      #based on RS sampling rate (another if statement for IRIS data sampling rates?)
+ 
+        #signal after the pwave arrives
+        pwin=int(rPtime*sps-1)
+        epwin=int(pwin+window*sps-1)
+        signal = np.mean(vel_square[pwin:epwin])     #based on RS sampling rate 
+ 
+        ratio = signal/noise
+        return(ratio)  
+    else :
+        print("WARNING:  window ",window," is greater than rPtime", rPtime, "returning 0.")
+        return 0
+    
 
 ### old  ###########################
  

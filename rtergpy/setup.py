@@ -14,7 +14,8 @@ setup(
                         'matplotlib>=3.3.0',
                         'tqdm',
                         'obspy>=1.2.0',
-                        'pandas>=1.2.0'
+                        'pandas>=1.2.0',
+                        'compress_pickle'
                         ],
     classifiers=[ 
         'Development Status :: 2 - Beta',
