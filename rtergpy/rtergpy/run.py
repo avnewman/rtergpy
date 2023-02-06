@@ -301,10 +301,14 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
         Edistplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
         Eazplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
         Ehistogram(EBB,EHF,Emd,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
-        stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=showPlots)
         mpl.pyplot.close('all')  # they don't close themselves
     except:
         print("ERROR: Plotting Results for "+eventname) # test 
+
+    try:
+    	stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=showPlots)
+    except IOError as err:
+        print("ERROR: Map Plot for "+eventname+":",e)
 
     os.chdir('..')
 

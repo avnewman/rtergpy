@@ -9,14 +9,6 @@ setup(
     author_email='anewman@gatech.edu',
     license='MIT',
     packages=['rtergpy'],
-    install_requires=['pygmt>=0.7.0', 
-                        'numpy>=1.0',
-                        'matplotlib>=3.3.0',
-                        'tqdm',
-                        'obspy>=1.2.0',
-                        'pandas>=1.2.0',
-                        'compress_pickle'
-                        ],
     classifiers=[ 
         'Development Status :: 2 - Beta',
         'Intended Audience :: Science',

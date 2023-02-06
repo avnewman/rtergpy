@@ -12,14 +12,13 @@ import pandas as pd
 
 Defaults=defaults()
 Event=event()
-#Defaults.src='IRIS'
-Defaults.src='NEIC'
+Defaults.src='IRIS'
+#Defaults.src='NEIC'
 Event.newData=False # True is default
 Event.ecount='00'
 edateold=""
 # events older than available in NEIC
-CMTS=pd.read_csv('CMTS_NEIC.txt', sep='\s+', comment="#")  # any amount of whitespace
-CMTS=pd.read_csv('temp.txt', sep='\s+', comment="#")  # any amount of whitespace
+CMTS=pd.read_csv('Recent_CMTS.txt', sep='\s+', comment="#")  # any amount of whitespace
 for index, EQ in CMTS.iterrows():
     eloc = [EQ.LAT,EQ.LONG,EQ.DEPTH] 
     year,mo,dd = EQ.DATE.split('/')
