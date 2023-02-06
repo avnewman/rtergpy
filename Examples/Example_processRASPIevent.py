@@ -13,7 +13,9 @@ from obspy import UTCDateTime
 Defaults=defaults()
 Event=event()
 
-Defaults.src='RASPISHAKE'
+Defaults.src="RASPISHAKE"
+Defaults.network="AM"
+Defaults.chan="EHZ"
 # 2023 Turkey EQ (Feb 6, 2023 - mainshock)
 eloc = [37.17,37.03,17.9]
 etime= UTCDateTime(2023,2,6,1,17,35) 
