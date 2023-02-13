@@ -335,6 +335,9 @@ def gmeanCut(x,cutoff=0, **kwargs):
     if cutoff>0:
         xkeep=x[x>xmean1/cutoff]
         xkeep=xkeep[xkeep<xmean1*cutoff]
+        if len(xkeep) == 0:
+            xkeep = x
+            print("Warning all data are out of range, not removing any for mean calc.")
         xmean=gmean(xkeep)
     else:
         xmean=xmean1

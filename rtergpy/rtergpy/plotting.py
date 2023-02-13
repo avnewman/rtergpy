@@ -206,6 +206,7 @@ def stationEmapPygmt(E,eloc,trdf,eventname,ttime,prePtime=-60,cutoff=15,itername
 # prep data for plotting
     eint=np.array(E.iloc[intval])
     emean,keep=gmeanCut(eint,cutoff=cutoff)
+    print(eint)   # need to look at, giving issues with division by zero
     enorm=np.log10(eint/emean)
 
     lats=[] ; lons=[]
