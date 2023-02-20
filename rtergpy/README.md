@@ -13,7 +13,7 @@ A paper describing this new code is forthcoming.
 ### Create a usable Conda environment for working with the package
 ```
 # create with a bunch of packages
-conda create --name rtergpy python=3.11 ipython ipykernel 
+conda create --name rtergpy python ipython ipykernel 
 ```
 ### Once you're in the proper environment, for me it is done by:
 ``` 
