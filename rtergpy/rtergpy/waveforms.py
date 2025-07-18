@@ -76,7 +76,7 @@ def theorPinfo(eloc,etime,sloc):
 
 def get_respinv(network,eloc,etime,rads,chan,src="IRIS",**kwargs):
     """
-    Algorithm to use Obspy's metadata to pull response and other metadata.  Returns an apporpiate
+    Algorithm to use Obspy's metadata to pull response and other metadata.  Returns an appropriate
     inventory class.
     A.V. Newman Mon Jul 26 15:26:35 EDT 2021
     """
@@ -372,8 +372,10 @@ def eventdir(Defaults=Defaults,Event=Event,create=False,cd=True,**kwargs):
     
     if create:   # will attempt to create a new directory        
         if os.path.exists(edirit):
-            try:
-                bakdir=edirit+".bak"
+            print("Directory already exists: ",edirit)
+            try:  # move it to backup directory
+                bakname=int(os.stat(edirit).st_mtime)  # use modification time as backup name
+                bakdir=edirit+str(bakname)
                 shutil.move(edirit,bakdir)
             except:
                 print("ERROR:  coudn't move directory to ",bakdir)
@@ -383,14 +385,14 @@ def eventdir(Defaults=Defaults,Event=Event,create=False,cd=True,**kwargs):
                 os.chdir(edirit)
                 print("New working directory is: ",edirit)
         except:
-            print("Error:  Couldn't create directory: ", edirit)
+            print("ERROR:  Couldn't create new directory: ", edirit)
     else:   # use existing directory
         try:
             if cd:
                 os.chdir(edirit)
                 print("Working directory now: ",edirit)
         except:
-            print("ERROR:  coudn't move into directory ", edirit)
+            print("ERROR:  Coudn't move into existing directory ", edirit)
     return edirit,owd
 
 def getwaves(Defaults=Defaults, Event=Event, **kwargs): 
@@ -604,7 +606,7 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
         print("WARNING:  will only iterate over first 2 of ",len(fbands),"frequency bands")
     fbandlabel="BB"
     for fband in fbands[:2]:   # will only iterate over first to sets of bands if more are included
-        tempEdf=pd.DataFrame()  # energies
+        tempEdf_dict = {}  # energies dictionary
         print("Running fband",fband,"Hz:")
         netstatchan=[0]*len(st)
         fbandlist=[0]*len(st)
@@ -614,14 +616,13 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
         est2corr=[0]*len(st)
         i = 0
         for tr in tqdm(st):
-            # calc cum. energy and save in dataframe
+            # calc cum. energy and save in dictionary
             netstatchan[i]=str(tr).split(" | ")[0]
             Ergs=wave2energytinc(tr, Defaults, Event, fband=fband)
             # pad energy results with zeros for any waveforms that run short
             Epersec=list(Ergs[0])
             Epersec=(Epersec+nsamples *[0])[:nsamples]
-            #print(i, netstatchan[i], len(Epersec))
-            tempEdf[netstatchan[i]]=Epersec
+            tempEdf_dict[netstatchan[i]] = Epersec
             # build data frame with metadata, focal corrections
             fbandlist[i]=fband
             waveparamlist[i]=[waveparams[1],tstep]
@@ -629,6 +630,7 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
             FgP2[i]=Ergs[2]
             est2corr[i]=Ergs[3]
             i += 1
+        tempEdf = pd.DataFrame(tempEdf_dict)
         dfdict={"netstatchan":netstatchan,"fband"+fbandlabel:fbandlist,"waveparams":waveparamlist,
             "estFgP2":estFgP2,"FgP2":FgP2,"est2corr":est2corr}
         tempMDdf=pd.DataFrame(dfdict, dtype=object)
@@ -680,19 +682,20 @@ def tacer(dE,prePtime=60, **kwargs):
     output is tacer (Time-Averaged Cumulative Energy Rate)
     """
     dEPonly=dE[int(0-prePtime):]
-    tacerout=pd.DataFrame()
-    itr=0  # trace number
-    progressbar=tqdm(total=len(dEPonly.columns))
+    tacerout_dict = {}
+    itr = 0  # trace number
+    progressbar = tqdm(total=len(dEPonly.columns))
     while itr < len(dEPonly.columns):
-        i=0  # position within trace
-        cumerate=[]
+        i = 0  # position within trace
+        cumerate = []
         while i < len(dEPonly):
             i += 1
-            cumerate.append(dEPonly.iloc[0:i,itr].sum()/(i))  # sum all values before ith locations
-        tacerout[dEPonly.columns[itr]]=cumerate
+            cumerate.append(dEPonly.iloc[0:i, itr].sum() / (i))  # sum all values before ith locations
+        tacerout_dict[dEPonly.columns[itr]] = cumerate
         itr += 1
         progressbar.update(1)
     progressbar.close()
+    tacerout = pd.DataFrame(tacerout_dict)
     return tacerout
 
 def tacerstats(tacer):

@@ -171,8 +171,9 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 
     # create an array of station data 
     trdf=pd.DataFrame()
-    for tr in st:
-        trdf=trdf.append(trstat2pd(tr),ignore_index=True)
+    trdf = pd.concat([trstat2pd(tr) for tr in st], ignore_index=True)
+    #for tr in st:
+    #    trdf=trdf.append(trstat2pd(tr),ignore_index=True)
 
     print("Calculating Energy growth with time ")
     # Calculate energies over all waves
