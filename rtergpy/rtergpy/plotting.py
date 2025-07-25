@@ -4,15 +4,15 @@ from numpy import sin,cos,arcsin,sqrt,abs,pi,log10,exp
 import os
 import numpy as np
 import pandas as pd
-from rtergpy.waveforms import gmeanCut,tacerstats
+from rtergpy.waveforms import gmeanCut,e2Me #,tacerstats
 from rtergpy.run import defaults,event
 Event=event()
 Defaults=defaults()
 import matplotlib.pyplot as plt
 
-def fbandlabels(Emd):
-    fbb=Emd.fbandBB[0]
-    fhf=Emd.fbandHF[0]
+def fbandlabels(wp0):
+    fbb=wp0[0]
+    fhf=wp0[1]
     
     if  fbb[0] < 0.00001:
         fminbblabel="0"
@@ -83,7 +83,7 @@ def Edistplot(Ebb,Ehf,Emd,trinfo,eventname,ttime, prePtime=-60,cutoff=15,show=Tr
     emeanbb,keepbb=gmeanCut(ebb,cutoff=cutoff)
     emeanhf,keephf=gmeanCut(ehf,cutoff=cutoff) 
 
-    labelbb,labelhf=fbandlabels(Emd)
+    labelbb,labelhf=fbandlabels([Emd.fbandBB[0],Emd.fbandHF[0]])
     fig=plt.figure()
     fig.patch.set_facecolor('white')
     plt.plot(distance,ebb/emeanbb,'o',alpha=0.6,label=labelbb, color='blue')
@@ -106,7 +106,7 @@ def Eazplot(Ebb,Ehf,Emd,trinfo,eventname,ttime, prePtime=-60,cutoff=15,show=True
     emeanbb,keepbb=gmeanCut(ebb,cutoff=cutoff)
     emeanhf,keephf=gmeanCut(ehf,cutoff=cutoff)
 
-    labelbb,labelhf=fbandlabels(Emd)
+    labelbb,labelhf=fbandlabels([Emd.fbandBB[0],Emd.fbandHF[0]])
     fig=plt.figure()
     fig.patch.set_facecolor('white')
     plt.plot(trinfo["az"],ebb/emeanbb,'o',alpha=0.6,label=labelbb, color='blue')
@@ -129,9 +129,7 @@ def Ehistogram(Ebb,Ehf,Emd,eventname,ttime, prePtime=-60,cutoff=15,show=True, **
     emeanbb,keepbb=gmeanCut(ebb,cutoff=cutoff)
     emeanhf,keephf=gmeanCut(ehf,cutoff=cutoff)
 
-    labelbb,labelhf=fbandlabels(Emd)
-    #print("%s: %d traces, %.2e +- 10^%.2f [J]" %(labelbb,len(keepbb), emeanbb, np.std(np.log10(keepbb))))
-    #print("%s: %d traces, %.2e +- 10^%.2f [J]" %(labelhf,len(keephf), emeanhf, np.std(np.log10(keephf))))
+    labelbb,labelhf=fbandlabels([Emd.fbandBB[0],Emd.fbandHF[0]])
 
     fig=plt.figure()
     fig.patch.set_facecolor('white')
@@ -150,7 +148,7 @@ def Ehistogram(Ebb,Ehf,Emd,eventname,ttime, prePtime=-60,cutoff=15,show=True, **
         plt.show()
  
 def Etincplot(Ebb,Ehf,Emd,trdf,ntr=0, **kwargs):
-    labelbb,labelhf=fbandlabels(Emd)
+    labelbb,labelhf=fbandlabels([Emd.fbandBB[0],Emd.fbandHF[0]])
     etincBB=np.array(Ebb.iloc[:,ntr])
     etincHF=np.array(Ehf.iloc[:,ntr])
     
@@ -206,7 +204,7 @@ def stationEmapPygmt(E,eloc,trdf,eventname,ttime,prePtime=-60,cutoff=15,itername
 # prep data for plotting
     eint=np.array(E.iloc[intval])
     emean,keep=gmeanCut(eint,cutoff=cutoff)
-    print(eint)   # need to look at, giving issues with division by zero
+    #print(eint)   # need to look at, giving issues with division by zero
     enorm=np.log10(eint/emean)
 
     lats=[] ; lons=[]
@@ -407,3 +405,99 @@ def stationEmapBasemap(E,eloc,trdf,intval=-1,cutoff=15,**kwargs):
     plt.plot(ex,ey, marker='*', color='y', ms=60, mec='k', alpha=0.6)
 
     plt.show()
+
+def ETxoplot(EBBlmean,EHFlmean,upFitResults,downFitResults,Event=event(),Defaults=defaults(),show=False):
+
+    # Extract best window fit info
+    min1Window, min1Peak_t1, min1Peak_t2, min1Peak_slope, min1Peak_intercept, min1MisfitPeak, m1results = upFitResults
+    min2Window, min2Peak_t1, min2Peak_t2, min2Peak_slope, min2Peak_intercept, min2MisfitPeak, m2results = downFitResults
+    prePtime=Defaults.waveparams[1][0]
+    EBBTxo=Event.EBBTxo
+    EHFTxo=Event.EHFTxo
+    Txo=Event.Txo
+    labelbb,labelhf=fbandlabels(Defaults.waveparams[0])
+    HFEcorr=Defaults.HFEcorr
+
+    # Generate x and y for the fit plots
+    x=np.arange(0, len(EHFlmean))
+    y1_fitFull= min1Peak_slope * x + min1Peak_intercept
+    y2_fitFull= min2Peak_slope * x + min2Peak_intercept
+    x1_fit = np.arange(min1Peak_t1, min1Peak_t2)
+    y1_fit = min1Peak_slope * x1_fit + min1Peak_intercept
+    x2_fit = np.arange(min2Peak_t1, min2Peak_t2)
+    y2_fit = min2Peak_slope * x2_fit + min2Peak_intercept
+
+    # Plot the data and the fit
+    tsize=len(EBBlmean)+prePtime
+    fig = plt.figure(figsize=(8, 8))
+    gs = fig.add_gridspec(2, hspace=0.1, height_ratios=[2, 2])
+    axs = gs.subplots(sharex=True, sharey=False)
+    fig.suptitle(f"Cumulative Energy Growth ($M_ETxo$= {e2Me(EBBTxo):.2f}, Txo= {Txo:.1f} s)", fontsize=16, y=0.965)
+
+    # top plot
+    axs[0].plot(x+prePtime, EBBlmean, label="",color='blue', linewidth=3)
+    axs[0].set_ylabel("Cumulative BB Energy")
+    axs[0].axvline(x=Txo, color='black', linewidth=3, linestyle='-', alpha=1, label=f'Txo = {Txo:.2f}s')
+    axs[0].set_ylim(0, 1.1* EBBlmean.max())
+    axs[0].axhline(y=EBBTxo, color='black', linewidth=1, linestyle=':', alpha=0.5, label='')
+    axs[0].text(tsize*0.95, 1.05*EBBTxo, f'$E_BB(Txo)$ = {EBBTxo:.1e} J, $M_E$ = {e2Me(EBBTxo):.2f}', horizontalalignment='right')
+    axs[0].text(tsize*0.95,0.09*EBBlmean.max(), f"N stats used = {Event.nBBlmean}", horizontalalignment='right')
+    axs[0].text(tsize*0.95,0.03*EBBlmean.max(), f"f-band ({labelbb})", horizontalalignment='right')
+    
+    title=Event.origin[1].strftime("%Y/%m/%d %H:%M:%S")+" ("+str(Event.eventname)+f") at {Event.origin[0][0]:.2f}°, {Event.origin[0][1]:.2f}°, Z={Event.origin[0][2]:.1f} "
+    axs[0].set_title(title)
+
+    # right side of plot
+    ax0r = axs[0].twinx()
+    MeGrowth = e2Me(EBBlmean)
+
+    # create ticks for Me axis
+    start = round(MeGrowth.max()-0.7, 1)
+    end = round(MeGrowth.max(), 1)
+    tick_labels = [round(val, 1) for val in np.arange(start, end + 0.1, 0.1)]
+    Ebb_ticks = [10 ** ((me + 2.9) * 1.5) for me in tick_labels]
+    ax0r.set_yticks(Ebb_ticks)
+    ax0r.set_yticklabels(tick_labels)
+    ax0r.set_ylabel("$M_Ebb$ (BB Energy Magnitude)")
+    ax0r.tick_params(axis='y', colors='black')
+    ax0r.spines['right'].set_color('black')
+    ax0r.set_ylim(0, 1.1* EBBlmean.max())  # set limits for Me axis
+
+    # bottom plot
+    axs[1].plot(x+prePtime, EHFlmean, label="", color='red',linewidth=3)  # average of all tacer values
+    axs[1].plot(x+prePtime, y1_fitFull, '-', label="",color='gray', linewidth=1,alpha=0.5)
+    axs[1].plot(x+prePtime, y2_fitFull, '-', label="Best fits", color='gray', linewidth=1,alpha=0.5)
+    axs[1].plot(x1_fit+prePtime, y1_fit, '-', label="",color='black', linewidth=3, alpha=0.5)
+    axs[1].plot(x2_fit+prePtime, y2_fit, '-', label="", color='black', linewidth=3, alpha=0.5)
+    axs[1].set_ylim(0, 1.1* EHFlmean.max())
+    axs[1].set_xlim(0, tsize)
+    axs[1].axhline(y=EHFTxo, color='black', linewidth=1, linestyle=':', alpha=0.5, label=f'ETxo = {EHFTxo:.1e}s')
+    axs[1].text(tsize*0.95, 1.05*EHFTxo, f'$E(Txo)$ = {EHFTxo:.1e} J, $M_E$ = {e2Me(EHFTxo,eCorrection=HFEcorr):.2f}', horizontalalignment='right')
+
+    axs[1].axvline(x=Txo, color='black', linewidth=3, linestyle='-', alpha=1, label=f'Txo = {Txo:.2f}s')
+    axs[1].set_xlabel("Time from Theoretical P-arrival [s]")
+    axs[1].set_ylabel("Cumulative HF Energy")
+    axs[1].text(tsize*0.95,0.09*EHFlmean.max(), f"N stats used = {Event.nHFlmean}", horizontalalignment='right')
+    axs[1].text(tsize*0.95,0.03*EHFlmean.max(), f"f-band ({labelhf})", horizontalalignment='right')
+    
+    axs[1].text(Txo+5,0.05*EHFlmean.max(), f"Txo= {Txo:.1f} s", horizontalalignment='left', rotation=90)
+
+    # right side of plot
+    ax1r = axs[1].twinx()
+    MeGrowth = e2Me(EHFlmean, eCorrection=HFEcorr)
+
+    # create ticks for Me axis
+    start = round(MeGrowth.max()-0.7, 1)
+    end = round(MeGrowth.max(), 1)
+    tick_labels = [round(val, 1) for val in np.arange(start, end + 0.1, 0.1)]
+    Ehf_ticks = [10 ** ((me + 2.9) * 1.5) for me in tick_labels]
+    Ehf_ticks = np.array(Ehf_ticks)/HFEcorr  # correct for HFEcorr
+    ax1r.set_yticks(Ehf_ticks)
+    ax1r.set_yticklabels(tick_labels)
+    ax1r.set_ylabel("$M_Ehf$ (HF Energy Magnitude)")
+    ax1r.tick_params(axis='y', colors='black')
+    ax1r.spines['right'].set_color('black')
+    ax1r.set_ylim(0, 1.1* EHFlmean.max())  # set limits for Me axis
+    plt.savefig('ETxo_'+Event.eventname+'.png', dpi=150)
+    if show:
+        plt.show()

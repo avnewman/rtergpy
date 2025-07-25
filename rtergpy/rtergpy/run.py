@@ -1,6 +1,3 @@
-#from rtergpy.waveforms import etime2name
-#from rtergpy.waveforms import tacerstats,trstat2pd,e2Me,process_waves,eventdir,iterate
-#from rtergpy.plotting import tacerplot,Edistplot,Ehistogram,Eazplot,stationEmapBasemap, stationEmapPygmt
 from obspy import UTCDateTime
 from tqdm import tqdm
 import numpy as np
@@ -34,9 +31,6 @@ class defaults:
             print("ERROR: Could not find configuration file 'rtergpy.conf'")
             pass
        
-       # if DEFS["USEAGG"]:   # set no display
-       #     matplotlib.use("AGG")  
-
         self.basedir=DEFS["basedir"]
         self.edirbase=DEFS["edirbase"]  
         self.libdir=DEFS["libdir"]
@@ -68,6 +62,9 @@ class defaults:
         self.qbc=float(DEFS["qbc"]) #q-factor from B&C
         self.avfpsq=float(DEFS["avfpsq"])
         self.aob=float(DEFS["aob"])  # alpha over beta  (Poisson solid)
+
+        # high frequency magnitude correction
+        self.HFEcorr=5.  # this is an old value from the legacy code. may need updating
 
         # processing tacers/energy
         self.cutoff=float(DEFS["cutoff"])  # factor by which to ignore data (values must be between mean/cutoff and mean*cutoff)
@@ -124,7 +121,8 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     """
     from rtergpy.waveforms import getwaves,ErgsFromWaves,loadwaves,gmeanCut,tacer,tacerstats
     from rtergpy.waveforms import trstat2pd,e2Me,eventdir
-    from rtergpy.plotting import tacerplot,Edistplot,Ehistogram,Eazplot, stationEmapPygmt, fbandlabels, Efluxplots
+    from rtergpy.plotting import tacerplot,Edistplot,Ehistogram,Eazplot, stationEmapPygmt, fbandlabels, Efluxplots,ETxoplot
+    from scipy.interpolate import interp1d
     import numpy as np
     import pandas as pd
     import matplotlib as mpl
@@ -134,7 +132,6 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 
     if Event.newData:
         print("Getting waveforms")
-        #st,df=getwaves(eloc,etime,pwindow=Def.waveparams[1],rads=Def.stationrange)
         st,df=getwaves(Defaults=Defaults,Event=Event)
     else:
         print("Loading locally stored waveforms")
@@ -217,7 +214,7 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 
     # cutoff=15 # 15x +/-  # moved into defaults
     cutoff=Defaults.cutoff
-    labelbb,labelhf=fbandlabels(Emd)
+    labelbb,labelhf=fbandlabels([Emd.fbandBB[0],Emd.fbandHF[0]])
 
     print("From Median Tacer: --------------------------")
     ebbmedtacmean,keepbb=gmeanCut(ebbmedtac,cutoff=cutoff)
@@ -285,29 +282,90 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     Event.Me=e2Me(ebbpertacmean)
     Event.ttime=ttimeHF
 
+
+#.  Create Legecy Txo, Ebb and Ehf from Txo
+    HFEcorr=Defaults.HFEcorr
+
+    # should create results that are the same/similar to before.  We would average only results withing 15x the original geometric mean.
+    print("Calculating log mean of EBB and EHF energies for cumulative growth curves")
+    EBBlmean,nBBlmean=logmeanEnergy(EBB, cutoff=Defaults.cutoff)
+    EHFlmean,nHFlmean=logmeanEnergy(EHF, cutoff=Defaults.cutoff)
+    Event.nBBlmean=nBBlmean
+    Event.nHFlmean=nHFlmean
+
+    # Extract best window fit info
+    windowUp= np.arange(5, 60, 5)
+    upResults=bestWindow(EHFlmean, windows=windowUp, starttime=0-prePtime, minwindow=10, choice="MaxSlope") # find the best fit and window for the up-slope (controlled in part by prePtime and window choices)
+    windowDown= np.arange(50,300,5)
+    downResults=bestWindow(EHFlmean, windows=windowDown, excludeLast=60,choice="MinMisfit", startTime=upResults[2]+upResults[0]) # find the best fit and window for the down-slope (controlled in part by prePtime and window choices)
+
+    # Extract best window fit info
+
+    Txo=resultsWindow2Txo(upResults,downResults,prePtime)
+    print(f"Txo = {Txo:.2f} seconds (crossover time)")
+
+    # Energy values at Txo
+    x=np.arange(0, len(EHFlmean))
+    EBBlmean_func = interp1d(x + prePtime, EBBlmean, bounds_error=False, fill_value="extrapolate")
+    EBBTxo = EBBlmean_func(Txo)
+    print(f"EBBlmean at Txo ({Txo:.2f} s): {EBBTxo:.2e} J, (MeBB {e2Me(EBBTxo):.2f})")
+
+    EHFlmean_func = interp1d(x + prePtime, EHFlmean, bounds_error=False, fill_value="extrapolate")
+    EHFTxo = EHFlmean_func(Txo)
+    print(f"EHFlmean at Txo ({Txo:.2f} s): {EHFTxo:.2e} J, (MeBB {e2Me(EBBTxo,eCorrection=HFEcorr):.2f})")
+    Event.EBBTxo=EBBTxo
+    Event.EHFTxo=EHFTxo
+    Event.Txo=Txo
+
+
+
+
+
     # Create plots  
     
     print("Making figures\n")
     if not os.path.exists('figs'):   # create and go into pkls dir
         os.mkdir('figs')
     os.chdir('figs')
+    if not showPlots:
+        mpl.use('Agg')  # needed to plot without using the X-session
+    # individual plot runs    
+    droppcts=[0.5,.25,0.1]
+    try: 
+        eloc=Event.origin[0]
+        st.plot(type='section', dist_degree=True, ev_coord=[eloc[0], eloc[1]], orientation='horizontal', scale=3, outfile=f"Moveout_{Event.eventname}.png");
+    except:
+            print("ERROR: Moveout Plot for "+eventname+":",e)
     try:
-        if not showPlots:
-            mpl.use('Agg')  # needed to plot without using the X-session
-        # individual plot runs    
-        droppcts=[0.5,.25,0.1]
         droptimes=Efluxplots(dEHFdtSmooth, trdf, Event=Event, Defaults=Defaults, pcts=droppcts, show=showPlots)    
         results["Droptimes"]=[droptimes]
-        tacerplot(tacerHF,trdf,ttimes,meds,eventname,show=showPlots)
-        Edistplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
-        Eazplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
-        Ehistogram(EBB,EHF,Emd,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
-        mpl.pyplot.close('all')  # they don't close themselves
     except:
-        print("ERROR: Plotting Results for "+eventname) # test 
+        print("ERROR: Eflux plots for "+eventname+":",e)
+    try:
+        tacerplot(tacerHF,trdf,ttimes,meds,eventname,show=showPlots)
+    except:
+        print("ERROR: Tacer plot for  "+eventname+":",e)
+    try:    
+        Edistplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
+    except:
+        print("ERROR: Edistance plot for  "+eventname+":",e)
+    try:
+        Eazplot(EBB,EHF,Emd,trdf,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
+    except:
+        print("ERROR: E-AZ plot for  "+eventname+":",e)
+    try:
+        Ehistogram(EBB,EHF,Emd,eventname,ttimeHF, prePtime=prePtime,show=showPlots,cutoff=cutoff)
+    except:
+        print("ERROR: E histogram for  "+eventname+":",e)
+    try:
+        ETxoplot(EBBlmean,EHFlmean,upResults,downResults,Event=Event,Defaults=Defaults,show=False)
+    except:
+        print("ERROR: E Txo plot for  "+eventname+":",e)
+
+    mpl.pyplot.close('all')  # they don't close themselves
 
     try:
-    	stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=showPlots)
+        stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=showPlots)
     except IOError as err:
         print("ERROR: Map Plot for "+eventname+":",e)
 
@@ -330,8 +388,6 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
         os.chdir('..')
     except:
         print("ERROR: writing results for"+eventname)
-
-
     os.chdir(origwd)  # go back to old directory
 
 def mergeResults(Defaults=defaults(), iteration='00', **kwargs):
@@ -359,3 +415,81 @@ def mergeResults(Defaults=defaults(), iteration='00', **kwargs):
     df.insert(18, 't75', dfttimes['t75'],True)
     df.sort_values(by=['eventname'],inplace=True,ignore_index=True)  # results should be time sorted now
     return df
+
+def logmeanEnergy(E, Defaults=defaults(), cutoff=15, **kwargs):
+    """Calculate the log mean of energy E, excluding values below the cutoff"""
+    cutoff = Defaults.cutoff
+    logE = np.log10(E)
+    last_vals = logE.iloc[-1]                # last value of each column
+    mean_last_val = last_vals.mean()         # mean of last values#logEclean = logE.loc[:, last_vals < mean_last_val+np.log10(cutoff) & last_vals > mean_last_val-np.log10(cutoff)]  # keep columns where last value < mean
+    logEclean = logE.loc[:, (last_vals < mean_last_val + np.log10(cutoff)) & (last_vals > mean_last_val - np.log10(cutoff))]
+    print("keeping", logEclean.shape[1],"out of", logE.shape[1],"traces due to cutoff=", cutoff)  # should be same as EBB.shape
+    return 10 ** logEclean.mean(axis=1),logEclean.shape[1]  # mean of log values above cutoff
+
+
+def bestWindow(E, windows,startTime=60, excludeLast=0, choice="MaxSlope", **kwargs):
+    """Find the best window for growth of cumulative energy, E"""
+    tlen=len(E)-excludeLast  # length of time series [seconds]. includes prePtime
+    seq = np.arange(startTime, tlen + 1-excludeLast)
+    window=20  # seconds
+    # Fit growth of HF data
+    mresults = []
+    for window in windows: 
+        results = []
+        for t1 in seq[::1]:
+            t2 = t1 + window    
+            if t2 > tlen:  # keep it from running into a wall
+                t2 = tlen
+            wlen= t2 - t1    
+            # Linear fit for EHFnormsum between t1 and t2
+            x = np.arange(t1, t2)
+            y = E.iloc[t1:t2]
+            if len(x) >  2:  # Need at least 3 points for a fit
+                coeffs = np.polyfit(x, y, 1)  # coeffs[0]=slope, coeffs[1]=intercept
+                yfit = np.polyval(coeffs, x)
+                misfit = np.sqrt(np.mean((y - yfit) ** 2))/(wlen-2)
+            else:
+                coeffs = [np.nan, np.nan]
+                misfit = np.nan
+            #print(f"t1={t1}, t2={t2}, slope={coeffs[0]:.4f}, intercept={coeffs[1]:.4f}, misfit={misfit:.4f}")
+            results.append({
+                "t1": t1,
+                "t2": t2,
+                "slope": coeffs[0],
+                "intercept": coeffs[1],
+                "misfit": misfit
+            })
+        if choice == "MinMisfit":
+            idx = np.nanargmin([r["misfit"] for r in results])
+        else:
+        #elif choice == "MaxSlope":
+            idx = np.nanargmax([r["slope"] for r in results])
+
+        best_t1 = results[idx]["t1"]
+        best_t2 = results[idx]["t2"]
+        best_misfit = results[idx]["misfit"]
+        best_slope = results[idx]["slope"]
+        best_intercept = results[idx]["intercept"]
+        #print(f"Peak slope: {peak_slope:.4f} at t1={peak_t1}, t2={peak_t2}, misfit={misfitPeak:.4e}, for window={window} seconds")
+        mresults.append([window, best_t1, best_t2, best_slope, best_intercept, best_misfit])
+    midx = np.nanargmin([m[5] for m in mresults])
+    minMF_Window= mresults[midx][0]
+    minMF_t1= mresults[midx][1]
+    minMF_t2= mresults[midx][2]
+    minMF_slope= mresults[midx][3]
+    minMF_intercept= mresults[midx][4]
+    minMF= mresults[midx][5]
+    print(f"Best window: {minMF_Window} seconds, Peak slope: {minMF_slope:.2e} at t1={minMF_t1}, t2={minMF_t2}, misfit={minMF:.4e}")
+    return minMF_Window, minMF_t1, minMF_t2, minMF_slope, minMF_intercept, minMF, mresults
+
+def resultsWindow2Txo(r1,r2,prePtime):
+    """
+    r1 = results from the upslope fit (output of bestWindow)
+    r2 = results from the downslope fit ("")
+    prePtime=start time of waveforms relative to the theoretical P-wave (negative is before P)
+
+    outputs Txo
+    """
+    min1Window, min1Peak_t1, min1Peak_t2, min1Peak_slope, min1Peak_intercept, min1MisfitPeak, m1results = r1
+    min2Window, min2Peak_t1, min2Peak_t2, min2Peak_slope, min2Peak_intercept, min2MisfitPeak, m2results = r2
+    return(min2Peak_intercept-min1Peak_intercept)/(min1Peak_slope-min2Peak_slope)+prePtime

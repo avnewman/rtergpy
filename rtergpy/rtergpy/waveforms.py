@@ -344,11 +344,13 @@ def gmeanCut(x,cutoff=0, **kwargs):
         xkeep=x
     return xmean,xkeep
 
-def e2Me(e):
+def e2Me(e,eCorrection=1):
     """
     Outputs Energy Magnitude (Me) using the formalism of Choy and Boatright
+    eCorrection is 1 by default, but can be changed for specific Energy choices.
+    e.g. using the old HF energy (5)
     """
-    return 2/3*log10(e)-2.9
+    return 2/3 * np.log10(e*eCorrection)-2.9
 
 class iterate:
     count = 0
@@ -360,9 +362,19 @@ class iterate:
 
 def eventdir(Defaults=Defaults,Event=Event,create=False,cd=True,**kwargs):
     """
-    either go into an existing event directory, or create it and 
-    then go in.
+    Either go into an existing event directory, or create it and then go in.
     Depending on what you're doing, it may be good to know where you are beforehand.
+    The program will move the existing directory into a backup location if it already exists
+    with an extension using the modification time of the directory.
+
+    Inputs: 
+        Defaults - Defaults object with edirtbase, network, chan, stationrange, waveparams
+        Event - Event object with origin, ecount, iter, eventname, etc.
+        Create - if True, will attempt to create a new directory
+        cd - if True, will change the working directory to the event directory
+    Outputs:
+        edirit - the event directory path with the iteration appended
+        owd - original working directory
     """
     import os,shutil
     owd=os.getcwd()
@@ -799,3 +811,26 @@ def wave2energy(tr,waveparams,eqparams,siteparams):
   estNergy=Energy*4*pi*(avfpsq/estFgP2)*(1+qbc) # true energy for mech
   #print("sinu,Estar,Energy = ", sinu,Estar,Energy,Nergy,estNergy)
   return estNergy,Nergy,estFgP2,FgP2
+
+## TODO
+def mergetimeseries(Etimeseries, **kwargs):
+    """
+    Merge multiple time series into a single dataframe
+    """
+    import pandas as pd
+
+    # create a dictionary to hold the data
+    merged_dict = {}
+    
+    # iterate through each timeseries
+    for ts in tqdm(Etimeseries, desc="Merging Time Series"):
+        for col in ts.columns:
+            if col not in merged_dict:
+                merged_dict[col] = []
+            merged_dict[col].extend(ts[col].tolist())
+    
+    # create a DataFrame from the merged dictionary
+    merged_df = pd.DataFrame(merged_dict)
+    
+    return merged_df
+
