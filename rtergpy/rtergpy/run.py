@@ -97,6 +97,85 @@ class event:
         self.ttime=0
 
 
+def logmeanEnergy(E, Defaults=defaults(), cutoff=15, **kwargs):
+    """Calculate the log mean of energy E, excluding values below the cutoff"""
+    cutoff = Defaults.cutoff
+    logE = np.log10(E)
+    last_vals = logE.iloc[-1]                # last value of each column
+    mean_last_val = last_vals.mean()         # mean of last values#logEclean = logE.loc[:, last_vals < mean_last_val+np.log10(cutoff) & last_vals > mean_last_val-np.log10(cutoff)]  # keep columns where last value < mean
+    logEclean = logE.loc[:, (last_vals < mean_last_val + np.log10(cutoff)) & (last_vals > mean_last_val - np.log10(cutoff))]
+    print("keeping", logEclean.shape[1],"out of", logE.shape[1],"traces due to cutoff=", cutoff)  # should be same as EBB.shape
+    return 10 ** logEclean.mean(axis=1),logEclean.shape[1]  # mean of log values above cutoff
+
+
+def bestWindow(E, windows,startTime=60, excludeLast=0, choice="MaxSlope", **kwargs):
+    """Find the best window for growth of cumulative energy, E"""
+    tlen=len(E)-excludeLast  # length of time series [seconds]. includes prePtime
+    seq = np.arange(startTime, tlen + 1-excludeLast)
+    window=20  # seconds
+    # Fit growth of HF data
+    mresults = []
+    for window in windows: 
+        results = []
+        for t1 in seq[::1]:
+            t2 = t1 + window    
+            if t2 > tlen:  # keep it from running into a wall
+                t2 = tlen
+            wlen= t2 - t1    
+            # Linear fit for EHFnormsum between t1 and t2
+            x = np.arange(t1, t2)
+            y = E.iloc[t1:t2]
+            if len(x) >  2:  # Need at least 3 points for a fit
+                coeffs = np.polyfit(x, y, 1)  # coeffs[0]=slope, coeffs[1]=intercept
+                yfit = np.polyval(coeffs, x)
+                misfit = np.sqrt(np.mean((y - yfit) ** 2))/(wlen-2)
+            else:
+                coeffs = [np.nan, np.nan]
+                misfit = np.nan
+            #print(f"t1={t1}, t2={t2}, slope={coeffs[0]:.4f}, intercept={coeffs[1]:.4f}, misfit={misfit:.4f}")
+            results.append({
+                "t1": t1,
+                "t2": t2,
+                "slope": coeffs[0],
+                "intercept": coeffs[1],
+                "misfit": misfit
+            })
+        if choice == "MinMisfit":
+            idx = np.nanargmin([r["misfit"] for r in results])
+        else:
+        #elif choice == "MaxSlope":
+            idx = np.nanargmax([r["slope"] for r in results])
+
+        best_t1 = results[idx]["t1"]
+        best_t2 = results[idx]["t2"]
+        best_misfit = results[idx]["misfit"]
+        best_slope = results[idx]["slope"]
+        best_intercept = results[idx]["intercept"]
+        #print(f"Peak slope: {peak_slope:.4f} at t1={peak_t1}, t2={peak_t2}, misfit={misfitPeak:.4e}, for window={window} seconds")
+        mresults.append([window, best_t1, best_t2, best_slope, best_intercept, best_misfit])
+    midx = np.nanargmin([m[5] for m in mresults])
+    minMF_Window= mresults[midx][0]
+    minMF_t1= mresults[midx][1]
+    minMF_t2= mresults[midx][2]
+    minMF_slope= mresults[midx][3]
+    minMF_intercept= mresults[midx][4]
+    minMF= mresults[midx][5]
+    print(f"Best window: {minMF_Window} seconds, Peak slope: {minMF_slope:.2e} at t1={minMF_t1}, t2={minMF_t2}, misfit={minMF:.4e}")
+    return minMF_Window, minMF_t1, minMF_t2, minMF_slope, minMF_intercept, minMF, mresults
+
+def resultsWindow2Txo(r1,r2,prePtime):
+    """
+    r1 = results from the upslope fit (output of bestWindow)
+    r2 = results from the downslope fit ("")
+    prePtime=start time of waveforms relative to the theoretical P-wave (negative is before P)
+
+    outputs Txo
+    """
+    min1Window, min1Peak_t1, min1Peak_t2, min1Peak_slope, min1Peak_intercept, min1MisfitPeak, m1results = r1
+    min2Window, min2Peak_t1, min2Peak_t2, min2Peak_slope, min2Peak_intercept, min2MisfitPeak, m2results = r2
+    return(min2Peak_intercept-min1Peak_intercept)/(min1Peak_slope-min2Peak_slope)+prePtime
+
+
 def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     """
     Run event processing from data retrieval to final results with plots saved in appropriate directories.  
@@ -282,8 +361,7 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     Event.Me=e2Me(ebbpertacmean)
     Event.ttime=ttimeHF
 
-
-#.  Create Legecy Txo, Ebb and Ehf from Txo
+    #.  Create Legecy Txo, Ebb and Ehf from Txo
     HFEcorr=Defaults.HFEcorr
 
     # should create results that are the same/similar to before.  We would average only results withing 15x the original geometric mean.
@@ -317,12 +395,8 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     Event.EHFTxo=EHFTxo
     Event.Txo=Txo
 
-
-
-
-
     # Create plots  
-    
+
     print("Making figures\n")
     if not os.path.exists('figs'):   # create and go into pkls dir
         os.mkdir('figs')
@@ -338,7 +412,6 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
             print("ERROR: Moveout Plot for "+eventname+":",e)
     try:
         droptimes=Efluxplots(dEHFdtSmooth, trdf, Event=Event, Defaults=Defaults, pcts=droppcts, show=showPlots)    
-        results["Droptimes"]=[droptimes]
     except:
         print("ERROR: Eflux plots for "+eventname+":",e)
     try:
@@ -371,20 +444,65 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 
     os.chdir('..')
 
+    # Saving information  ################################
+    # create dataframe with Event based results
+    results=pd.DataFrame({
+        "eventname":eventname,"iteration":Event.iter,   # name/run
+        "etime":Event.origin[1],"elat":Event.origin[0][0],"elon":Event.origin[0][1],"edepth":Event.origin[0][2], "focmech":[Event.focmech],   # Event
+        "network":Defaults.network, "chan":Defaults.chan, "stationrange":[Defaults.stationrange], "nstats":len(trdf), #stations 
+        "fbands":[Defaults.waveparams[0]], "pwindow":[Defaults.waveparams[1]],  # wave params
+        "eventdir":df.eventdir, "modtime":UTCDateTime(),      # where and when processed
+        "cutoff":Defaults.cutoff, "ttimes":[ttimes],  # Results (and below)
+        "ebbmedtacmean":ebbmedtacmean, "STD10(medtac)":ebbmedtacmeanerr10, "Me(medtac)":e2Me(ebbmedtacmean), 
+        "ehfmedtacmean":ehfmedtacmean, "STD10(hfmedtac)":ehfmedtacmeanerr10,
+        "ebbcorrmedtacmean":ebbcorrmedtacmean, "STD10(corr)":ebbcorrmedtacmeanerr10, "Me(corr)":e2Me(ebbcorrmedtacmean), 
+        "ehfcorrmedtacmean":ehfcorrmedtacmean, "STD10(hfcorr)":ehfcorrmedtacmeanerr10,
+        "ebbpertacmean":ebbpertacmean, "STD10(per)":ebbpertacmeanerr10, "Me(per)":Event.Me, 
+        "ehfpertacmean":ehfpertacmean, "STD10(hfper)":ehfpertacmeanerr10,
+        "ebbcorrpertacmean":ebbcorrpertacmean, "STD10(percorr)":ebbcorrpertacmeanerr10, "Me(corrper)":e2Me(ebbcorrpertacmean), 
+        "ehfcorrpertacmean":ehfcorrpertacmean, "STD10(hfpercorr)":ehfcorrpertacmeanerr10,
+        "Ebb(Txo)": Event.EBBTxo, "Me(Txo)":e2Me(Event.EBBTxo), "EHF(Txo)":Event.EHFTxo, "Mehf(Txo)":e2Me(Event.EHFTxo), "Txo":Event.Txo,
+        "Droptimes": [droptimes]
+        }, dtype=object)
+
+    # time-series energy results for each station
+    Etimeseries=pd.concat([EBB,EHF,EBBSmooth,EHFSmooth,dEBBdtSmooth,dEHFdtSmooth,tacerBB,tacerHF],
+        keys=["EBB","EHF","EBBSmooth","EHFSmooth","dEBBdtSmooth","dEHFdtSmooth","tacerBB","tacerHF"])
+        # individual key can be extracted using (e.g. Energy.loc["EHF"])
+
+    # Cumulative Energy Time Series using the logrithmic mean 
+    Ecumtimeseries=pd.concat([EBBlmean,EHFlmean], keys=["EBBlmean","EHFlmean"], axis=1)
+
+    # per-station information
+    ETace=pd.DataFrame({'tacer':meds['time at max'],
+        'ebbmedtac':ebbmedtac, 'ehfmedtac':ehfmedtac,
+        'ebbcorrmedtac':ebbcorrmedtac, 'ehfcorrmedtac':ehfcorrmedtac,
+        'ebbpertac':ebbpertac, 'ehfpertac':ehfpertac,
+        'ebbcorrpertac':ebbcorrpertac, 'ehfcorrpertac':ehfcorrpertac
+        })
+    ETace=ETace.reset_index(drop=True)
+    StationTacer=pd.concat([trdf,Emd[["estFgP2","FgP2","est2corr"]],ETace],axis=1)
+
     # save results to files
     try:
         print("writing results\n")
-        # csv    
+        # csv  
+        if not os.path.exists('csvs'):   # create and go into pkls dir
+            os.mkdir('csvs')
+        os.chdir('csvs')  
         results.to_csv("Results_"+eventname+".csv")
-        Etimeseries.to_csv("Etimeseries_"+eventname+".csv")
-        StationTacer.to_csv("ETacer_"+eventname+".csv") 
+        Etimeseries.to_csv("EStationTimeSeries_"+eventname+".csv")
+        StationTacer.to_csv("ETacer_"+eventname+".csv")
+        Ecumtimeseries.to_csv("ECumulativeTimeSeries_"+eventname+".csv") 
+        os.chdir('..')
         # pkls 
         if not os.path.exists('pkls'):   # create and go into pkls dir
             os.mkdir('pkls')
         os.chdir('pkls')
         results.to_pickle("Results_"+eventname+".pkl")
-        Etimeseries.to_pickle("Etimeseries_"+eventname+".pkl")
-        StationTacer.to_pickle("Etacer_"+eventname+".pkl")
+        Etimeseries.to_pickle("EStationTimeSeries_"+eventname+".pkl")
+        StationTacer.to_pickle("ETacer_"+eventname+".pkl")
+        Ecumtimeseries.to_csv("ECumulativeTimeSeries_"+eventname+".csv") 
         os.chdir('..')
     except:
         print("ERROR: writing results for"+eventname)
@@ -415,81 +533,3 @@ def mergeResults(Defaults=defaults(), iteration='00', **kwargs):
     df.insert(18, 't75', dfttimes['t75'],True)
     df.sort_values(by=['eventname'],inplace=True,ignore_index=True)  # results should be time sorted now
     return df
-
-def logmeanEnergy(E, Defaults=defaults(), cutoff=15, **kwargs):
-    """Calculate the log mean of energy E, excluding values below the cutoff"""
-    cutoff = Defaults.cutoff
-    logE = np.log10(E)
-    last_vals = logE.iloc[-1]                # last value of each column
-    mean_last_val = last_vals.mean()         # mean of last values#logEclean = logE.loc[:, last_vals < mean_last_val+np.log10(cutoff) & last_vals > mean_last_val-np.log10(cutoff)]  # keep columns where last value < mean
-    logEclean = logE.loc[:, (last_vals < mean_last_val + np.log10(cutoff)) & (last_vals > mean_last_val - np.log10(cutoff))]
-    print("keeping", logEclean.shape[1],"out of", logE.shape[1],"traces due to cutoff=", cutoff)  # should be same as EBB.shape
-    return 10 ** logEclean.mean(axis=1),logEclean.shape[1]  # mean of log values above cutoff
-
-
-def bestWindow(E, windows,startTime=60, excludeLast=0, choice="MaxSlope", **kwargs):
-    """Find the best window for growth of cumulative energy, E"""
-    tlen=len(E)-excludeLast  # length of time series [seconds]. includes prePtime
-    seq = np.arange(startTime, tlen + 1-excludeLast)
-    window=20  # seconds
-    # Fit growth of HF data
-    mresults = []
-    for window in windows: 
-        results = []
-        for t1 in seq[::1]:
-            t2 = t1 + window    
-            if t2 > tlen:  # keep it from running into a wall
-                t2 = tlen
-            wlen= t2 - t1    
-            # Linear fit for EHFnormsum between t1 and t2
-            x = np.arange(t1, t2)
-            y = E.iloc[t1:t2]
-            if len(x) >  2:  # Need at least 3 points for a fit
-                coeffs = np.polyfit(x, y, 1)  # coeffs[0]=slope, coeffs[1]=intercept
-                yfit = np.polyval(coeffs, x)
-                misfit = np.sqrt(np.mean((y - yfit) ** 2))/(wlen-2)
-            else:
-                coeffs = [np.nan, np.nan]
-                misfit = np.nan
-            #print(f"t1={t1}, t2={t2}, slope={coeffs[0]:.4f}, intercept={coeffs[1]:.4f}, misfit={misfit:.4f}")
-            results.append({
-                "t1": t1,
-                "t2": t2,
-                "slope": coeffs[0],
-                "intercept": coeffs[1],
-                "misfit": misfit
-            })
-        if choice == "MinMisfit":
-            idx = np.nanargmin([r["misfit"] for r in results])
-        else:
-        #elif choice == "MaxSlope":
-            idx = np.nanargmax([r["slope"] for r in results])
-
-        best_t1 = results[idx]["t1"]
-        best_t2 = results[idx]["t2"]
-        best_misfit = results[idx]["misfit"]
-        best_slope = results[idx]["slope"]
-        best_intercept = results[idx]["intercept"]
-        #print(f"Peak slope: {peak_slope:.4f} at t1={peak_t1}, t2={peak_t2}, misfit={misfitPeak:.4e}, for window={window} seconds")
-        mresults.append([window, best_t1, best_t2, best_slope, best_intercept, best_misfit])
-    midx = np.nanargmin([m[5] for m in mresults])
-    minMF_Window= mresults[midx][0]
-    minMF_t1= mresults[midx][1]
-    minMF_t2= mresults[midx][2]
-    minMF_slope= mresults[midx][3]
-    minMF_intercept= mresults[midx][4]
-    minMF= mresults[midx][5]
-    print(f"Best window: {minMF_Window} seconds, Peak slope: {minMF_slope:.2e} at t1={minMF_t1}, t2={minMF_t2}, misfit={minMF:.4e}")
-    return minMF_Window, minMF_t1, minMF_t2, minMF_slope, minMF_intercept, minMF, mresults
-
-def resultsWindow2Txo(r1,r2,prePtime):
-    """
-    r1 = results from the upslope fit (output of bestWindow)
-    r2 = results from the downslope fit ("")
-    prePtime=start time of waveforms relative to the theoretical P-wave (negative is before P)
-
-    outputs Txo
-    """
-    min1Window, min1Peak_t1, min1Peak_t2, min1Peak_slope, min1Peak_intercept, min1MisfitPeak, m1results = r1
-    min2Window, min2Peak_t1, min2Peak_t2, min2Peak_slope, min2Peak_intercept, min2MisfitPeak, m2results = r2
-    return(min2Peak_intercept-min1Peak_intercept)/(min1Peak_slope-min2Peak_slope)+prePtime
