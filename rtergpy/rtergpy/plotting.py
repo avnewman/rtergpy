@@ -160,9 +160,20 @@ def Etincplot(Ebb,Ehf,Emd,trdf,ntr=0, **kwargs):
     ax1.set_ylabel(str("BB Energy Growth ["+labelbb+"]"))
     ax2.set_ylabel(str("HF Energy Growth ["+labelhf+"]"),color='blue')
 
-def stationEmapPygmt(E,eloc,trdf,eventname,ttime,prePtime=-60,cutoff=15,itername=0,libdir=Defaults.libdir,show=True,**kwargs):
+def stationEmapPygmt(E, trdf, ttime, Event=event(), Defaults=defaults(),prefix="",show=True,**kwargs):
+#def stationEmapPygmt(E,eloc,trdf,eventname,ttime,prePtime=-60,cutoff=15,itername=0,libdir=Defaults.libdir,show=True,**kwargs):
     import pygmt as gmt 
     import os
+    libdir=Defaults.libdir
+    prePtime=Defaults.waveparams[1][0]
+    cutoff=Defaults.cutoff
+    eloc=Event.origin[0]
+    focmech=Event.focmech
+    Mw=Event.Mw
+    Me=Event.Me
+    eventname=Event.eventname
+    itername=Event.iter
+
     intval=int(ttime-prePtime)   
     fig=gmt.Figure()
 
@@ -220,7 +231,16 @@ def stationEmapPygmt(E,eloc,trdf,eventname,ttime,prePtime=-60,cutoff=15,itername
     fig.colorbar(position="x13.7/0.2+w2.5c/0.2c+v")
 
 # plot event location in center
-    fig.plot(x=eloc[1],y=eloc[0], style="a0.85c",fill="green",pen="1p,black", transparency=50)
+    # Green Star
+    # fig.plot(x=eloc[1],y=eloc[0], style="a0.85c",fill="green",pen="1p,black", transparency=50)
+
+    # plot event focal mechanism location in center
+    emech=dict(strike=focmech[0], dip=focmech[1], rake=focmech[2], magnitude=Mw)
+    fig.meca(emech, scale="0.6c", 
+          longitude=eloc[1], latitude=eloc[0],depth=0,
+          transparency=40, compressionfill='red', 
+          outline='1p,black',
+         )
 
 # add text
     with gmt.config(MAP_FRAME_PEN="0,white"):
@@ -229,11 +249,13 @@ def stationEmapPygmt(E,eloc,trdf,eventname,ttime,prePtime=-60,cutoff=15,itername
         fig.text(text='Log@-10@- (@~D@~ Energy)',x=0.89,y=0.015, justify="LM", font="9p,Helvetica,black", angle=90)
         fig.text(text='Iteration: '+str(itername),x=0.87,y=0.97, justify="LM", font="10p,Helvetica,black", angle=0)
         fig.text(text='Event: '+str(eventname),x=0.015,y=0.97, justify="LM", font="10p,Helvetica,black", angle=0)
+        fig.text(text='<math>M_E</math>:'+str(f'{Me:.2f}'),x=0.015,y=0.935, justify="LM",font="10p,Helvetica,black", angle=0)
+        fig.text(text='<math>T_R</math>:'+str(f'{ttime:.1f}'+" s"),x=0.015,y=0.90, justify="LM",font="10p,Helvetica,black", angle=0)
         for deg in [25,80]:
             xpos=-(.707*deg/90/2)+0.5-0.006 # SW quad 45deg x=y
             fig.text(text=str(deg)+'@.',x=xpos,y=xpos, justify="CM",fill=220, font="10p,Helvetica,black", angle=-45)
 
-    fig.savefig('StationMap_'+eventname+'.png', dpi=150)
+    fig.savefig(prefix+'StationMap_'+eventname+'.png', dpi=150)
     if show:
         fig.show()
 
@@ -372,39 +394,6 @@ def Efluxplots_old(dEdt,trdf,eventname, prePtime=-60, ampDIST=10, ampAZ=30, show
         plt.show()
 
 
-### Below are testing 
-def stationEmapBasemap(E,eloc,trdf,intval=-1,cutoff=15,**kwargs):
-    import matplotlib as mpl
-    from mpl_toolkits.basemap import Basemap
-
-    eint=np.array(E.iloc[intval])
-    emean,keep=gmeanCut(eint,cutoff=cutoff)
-    lats=[] ; lons=[]
-    for netstatchan in E.columns:
-        coords= trdf[trdf['netstatchan'] == netstatchan]['coordinates'].tolist()[0]
-        lons.append(coords[1])
-        lats.append(coords[0])
-
-    enorm=np.log10(eint/emean)
-    
-    plt.rcParams['figure.dpi'] = 250  # this controls the size
-    plt.figure(figsize=(20,20))
-    map = Basemap(projection='ortho',lat_0=eloc[0],lon_0=eloc[1], resolution='l')
-    map.drawcoastlines(linewidth=0.25)
-    map.drawcountries(linewidth=0.25)
-    map.drawmapboundary(fill_color='whitesmoke')
-    map.drawmeridians(np.arange(0,360,20))
-    map.drawparallels(np.arange(-90,90,30))
-    map.bluemarble(scale=.1,alpha=0.45)
-    x,y=map(lons,lats)
-    #ax.stock_img()  # background (wish I could make it B&W)
-    cpt=plt.cm.seismic
-   
-    plt.scatter(x,y,c=enorm,cmap=cpt,norm=mpl.colors.Normalize(vmin=-1.5,vmax=1.5),marker='^', edgecolors='black', s=800, alpha=0.8)
-    ex,ey=map(eloc[1],eloc[0])
-    plt.plot(ex,ey, marker='*', color='y', ms=60, mec='k', alpha=0.6)
-
-    plt.show()
 
 def ETxoplot(EBBlmean,EHFlmean,upFitResults,downFitResults,Event=event(),Defaults=defaults(),show=False):
 
@@ -502,3 +491,39 @@ def ETxoplot(EBBlmean,EHFlmean,upFitResults,downFitResults,Event=event(),Default
     plt.savefig('ETxo_'+Event.eventname+'.png', dpi=150)
     if show:
         plt.show()
+
+
+### Below are testing ######################################################################################
+
+def stationEmapBasemap(E,eloc,trdf,intval=-1,cutoff=15,**kwargs):
+    import matplotlib as mpl
+    from mpl_toolkits.basemap import Basemap
+
+    eint=np.array(E.iloc[intval])
+    emean,keep=gmeanCut(eint,cutoff=cutoff)
+    lats=[] ; lons=[]
+    for netstatchan in E.columns:
+        coords= trdf[trdf['netstatchan'] == netstatchan]['coordinates'].tolist()[0]
+        lons.append(coords[1])
+        lats.append(coords[0])
+
+    enorm=np.log10(eint/emean)
+    
+    plt.rcParams['figure.dpi'] = 250  # this controls the size
+    plt.figure(figsize=(20,20))
+    map = Basemap(projection='ortho',lat_0=eloc[0],lon_0=eloc[1], resolution='l')
+    map.drawcoastlines(linewidth=0.25)
+    map.drawcountries(linewidth=0.25)
+    map.drawmapboundary(fill_color='whitesmoke')
+    map.drawmeridians(np.arange(0,360,20))
+    map.drawparallels(np.arange(-90,90,30))
+    map.bluemarble(scale=.1,alpha=0.45)
+    x,y=map(lons,lats)
+    #ax.stock_img()  # background (wish I could make it B&W)
+    cpt=plt.cm.seismic
+   
+    plt.scatter(x,y,c=enorm,cmap=cpt,norm=mpl.colors.Normalize(vmin=-1.5,vmax=1.5),marker='^', edgecolors='black', s=800, alpha=0.8)
+    ex,ey=map(eloc[1],eloc[0])
+    plt.plot(ex,ey, marker='*', color='y', ms=60, mec='k', alpha=0.6)
+
+    plt.show()

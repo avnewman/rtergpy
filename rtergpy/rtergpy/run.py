@@ -473,7 +473,9 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     mpl.pyplot.close('all')  # they don't close themselves
 
     try:
-        stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=showPlots)
+        stationEmapPygmt(EBB,trdf,ttimeHF,Event=Event,Defaults=Defaults,prefix="BB_",show=showPlots)
+        stationEmapPygmt(EHF,trdf,ttimeHF,Event=Event,Defaults=Defaults,prefix="HF_",show=showPlots)
+    #    stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=showPlots)
     except IOError as err:
         print("ERROR: Map Plot for "+eventname+":",e)
 
