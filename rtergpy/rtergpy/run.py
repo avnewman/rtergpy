@@ -96,17 +96,21 @@ class event:
         self.Me=0
         self.ttime=0
 
-
 def logmeanEnergy(E, Defaults=defaults(), cutoff=15, **kwargs):
     """Calculate the log mean of energy E, excluding values below the cutoff"""
     cutoff = Defaults.cutoff
+    
     logE = np.log10(E)
     last_vals = logE.iloc[-1]                # last value of each column
-    mean_last_val = last_vals.mean()         # mean of last values#logEclean = logE.loc[:, last_vals < mean_last_val+np.log10(cutoff) & last_vals > mean_last_val-np.log10(cutoff)]  # keep columns where last value < mean
-    logEclean = logE.loc[:, (last_vals < mean_last_val + np.log10(cutoff)) & (last_vals > mean_last_val - np.log10(cutoff))]
-    print("keeping", logEclean.shape[1],"out of", logE.shape[1],"traces due to cutoff=", cutoff)  # should be same as EBB.shape
-    return 10 ** logEclean.mean(axis=1),logEclean.shape[1]  # mean of log values above cutoff
+    
+    # only 
+    logEgt1 = logE.loc[:, last_vals > 1]
+    last_valsgt1 = logEgt1.iloc[-1]
 
+    mean_last_val = last_valsgt1.mean()         # mean of last values#logEclean = logE.loc[:, last_vals < mean_last_val+np.log10(cutoff) & last_vals > mean_last_val-np.log10(cutoff)]  # keep columns where last value < mean
+    logEclean = logEgt1.loc[:, (last_valsgt1 < mean_last_val + np.log10(cutoff)) & (last_valsgt1 > mean_last_val - np.log10(cutoff))]
+    print("keeping", logEclean.shape[1],"out of", logEgt1.shape[1],"traces due to cutoff=", cutoff)  # should be same as EBB.shape
+    return 10 ** logEclean.mean(axis=1),logEclean.shape[1]  # mean of log values above cutoff
 
 def bestWindow(E, windows,startTime=60, excludeLast=0, choice="MaxSlope", **kwargs):
     """Find the best window for growth of cumulative energy, E"""
@@ -361,7 +365,9 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     Event.Me=e2Me(ebbpertacmean)
     Event.ttime=ttimeHF
 
+    
     #.  Create Legecy Txo, Ebb and Ehf from Txo
+    
     HFEcorr=Defaults.HFEcorr
 
     # should create results that are the same/similar to before.  We would average only results withing 15x the original geometric mean.
