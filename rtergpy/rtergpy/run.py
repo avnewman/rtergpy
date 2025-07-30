@@ -92,6 +92,7 @@ class event:
         self.focmech=[phi,delta,lmbda]
 
         #additional event info either determined or brought in
+        self.Mi=0   # initial magnitude estimate regardless of type
         self.Mw=0
         self.Me=0
         self.ttime=0
@@ -200,6 +201,12 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     Event.origin=[eloc,etime]
     Event.focmech=[106, 26, 56] # phi,delta,lmbda
 
+    Event.Mi  is initial magnitude and will be reset to Mw if it exists and is large
+
+    Event.waveparams[1][1] #the amount of time to analyze following P-arrive will reset to larger values for big events
+      # M8.0+  = 500 s
+      # M8.5+ = 1000 s
+
     src2ergs(Defaults=Defaults,Event=Event)
     """
     from rtergpy.waveforms import getwaves,ErgsFromWaves,loadwaves,gmeanCut,tacer,tacerstats
@@ -212,6 +219,18 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     import os
     
     eventname=Event.eventname
+
+    # reset some parameters based on EQ size
+    # set initial magnitude to Mw if Mw is big and Mi is not
+    if (Event.Mi < 1) and (Event.Mw > 1) :
+        Event.Mi = Event.Mw
+    
+    # extend duration of data to get and run on for the largest earthquakes
+    if Event.Mi > 8.5 : 
+        Defaults.waveparams[1][1]=1000  # very bit event so go longer
+    elif Event.Mi > 8 : 
+        Defaults.waveparams[1][1]=500
+
 
     if Event.newData:
         print("Getting waveforms")
@@ -367,42 +386,49 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 
     
     #.  Create Legecy Txo, Ebb and Ehf from Txo
-    
-    HFEcorr=Defaults.HFEcorr
+    try: 
+        HFEcorr=Defaults.HFEcorr
+        EBBTxo = 0
+        EHFTxo = 0
+        Txo = 0
 
-    # should create results that are the same/similar to before.  We would average only results withing 15x the original geometric mean.
-    print("Calculating log mean of EBB and EHF energies for cumulative growth curves")
-    EBBlmean,nBBlmean=logmeanEnergy(EBB, cutoff=Defaults.cutoff)
-    EHFlmean,nHFlmean=logmeanEnergy(EHF, cutoff=Defaults.cutoff)
-    Event.nBBlmean=nBBlmean
-    Event.nHFlmean=nHFlmean
+        # should create results that are the same/similar to before.  We would average only results withing 15x the original geometric mean.
+        print("Calculating log mean of EBB and EHF energies for cumulative growth curves")
+        EBBlmean,nBBlmean=logmeanEnergy(EBB, cutoff=Defaults.cutoff)
+        EHFlmean,nHFlmean=logmeanEnergy(EHF, cutoff=Defaults.cutoff)
+        Event.nBBlmean=nBBlmean
+        Event.nHFlmean=nHFlmean
 
-    # Extract best window fit info
-    windowUp= np.arange(5, 60, 5)
-    upResults=bestWindow(EHFlmean, windows=windowUp, starttime=0-prePtime, minwindow=10, choice="MaxSlope") # find the best fit and window for the up-slope (controlled in part by prePtime and window choices)
-    windowDown= np.arange(50,300,5)
-    downResults=bestWindow(EHFlmean, windows=windowDown, excludeLast=60,choice="MinMisfit", startTime=upResults[2]+upResults[0]) # find the best fit and window for the down-slope (controlled in part by prePtime and window choices)
+        if (nBBlmean > 0) and (nHFlmean > 0) : 
+            # Extract best window fit info
+            windowUp= np.arange(5, 60, 5)
+            upResults=bestWindow(EHFlmean, windows=windowUp, starttime=0-prePtime, minwindow=10, choice="MaxSlope") # find the best fit and window for the up-slope (controlled in part by prePtime and window choices)
+            windowDown= np.arange(50,300,5)
+            downResults=bestWindow(EHFlmean, windows=windowDown, excludeLast=60,choice="MinMisfit", startTime=upResults[2]+upResults[0]) # find the best fit and window for the down-slope (controlled in part by prePtime and window choices)
 
-    # Extract best window fit info
+            # Extract best window fit info
+            Txo=resultsWindow2Txo(upResults,downResults,prePtime)
+            print(f"Txo = {Txo:.2f} seconds (crossover time)")
 
-    Txo=resultsWindow2Txo(upResults,downResults,prePtime)
-    print(f"Txo = {Txo:.2f} seconds (crossover time)")
+            # Energy values at Txo
+            x=np.arange(0, len(EHFlmean))
+            EBBlmean_func = interp1d(x + prePtime, EBBlmean, bounds_error=False, fill_value="extrapolate")
+            EBBTxo = EBBlmean_func(Txo)
+            print(f"EBBlmean at Txo ({Txo:.2f} s): {EBBTxo:.2e} J, (MeBB {e2Me(EBBTxo):.2f})")
 
-    # Energy values at Txo
-    x=np.arange(0, len(EHFlmean))
-    EBBlmean_func = interp1d(x + prePtime, EBBlmean, bounds_error=False, fill_value="extrapolate")
-    EBBTxo = EBBlmean_func(Txo)
-    print(f"EBBlmean at Txo ({Txo:.2f} s): {EBBTxo:.2e} J, (MeBB {e2Me(EBBTxo):.2f})")
+            EHFlmean_func = interp1d(x + prePtime, EHFlmean, bounds_error=False, fill_value="extrapolate")
+            EHFTxo = EHFlmean_func(Txo)
+            print(f"EHFlmean at Txo ({Txo:.2f} s): {EHFTxo:.2e} J, (MeHF {e2Me(EHFTxo,eCorrection=HFEcorr):.2f})")
+        else:
+            print("Notice: Insufficient data kept for logmean cumulative energy growth curves. nBBlmean = %i, nHFlmean = %" % ( nBBlmean,nHFlmean))
+    except: 
+        print("Notice: Could not creaate Legacy Txo, EBBTxo, or EHFTxo")
 
-    EHFlmean_func = interp1d(x + prePtime, EHFlmean, bounds_error=False, fill_value="extrapolate")
-    EHFTxo = EHFlmean_func(Txo)
-    print(f"EHFlmean at Txo ({Txo:.2f} s): {EHFTxo:.2e} J, (MeBB {e2Me(EBBTxo,eCorrection=HFEcorr):.2f})")
     Event.EBBTxo=EBBTxo
     Event.EHFTxo=EHFTxo
     Event.Txo=Txo
 
     # Create plots  
-
     print("Making figures\n")
     if not os.path.exists('figs'):   # create and go into pkls dir
         os.mkdir('figs')
@@ -437,7 +463,10 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     except:
         print("ERROR: E histogram for  "+eventname+":",e)
     try:
-        ETxoplot(EBBlmean,EHFlmean,upResults,downResults,Event=Event,Defaults=Defaults,show=False)
+        if Txo > 0 :
+            ETxoplot(EBBlmean,EHFlmean,upResults,downResults,Event=Event,Defaults=Defaults,show=False)
+        else:
+            print("Notice: Skipping ETxo plotting, Txo = 0")
     except:
         print("ERROR: E Txo plot for  "+eventname+":",e)
 

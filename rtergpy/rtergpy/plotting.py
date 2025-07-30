@@ -432,19 +432,19 @@ def ETxoplot(EBBlmean,EHFlmean,upFitResults,downFitResults,Event=event(),Default
     fig = plt.figure(figsize=(8, 8))
     gs = fig.add_gridspec(2, hspace=0.1, height_ratios=[2, 2])
     axs = gs.subplots(sharex=True, sharey=False)
-    fig.suptitle(f"Cumulative Energy Growth ($M_ETxo$= {e2Me(EBBTxo):.2f}, Txo= {Txo:.1f} s)", fontsize=16, y=0.965)
+    fig.suptitle("Cumulative Energy Growth ($M_E(T_{XO})$= %.2f, $T_{XO}$= %.1f s)" % (e2Me(EBBTxo), Txo), fontsize=16, y=0.965)
 
     # top plot
     axs[0].plot(x+prePtime, EBBlmean, label="",color='blue', linewidth=3)
     axs[0].set_ylabel("Cumulative BB Energy")
-    axs[0].axvline(x=Txo, color='black', linewidth=3, linestyle='-', alpha=1, label=f'Txo = {Txo:.2f}s')
+    axs[0].axvline(x=Txo, color='black', linewidth=3, linestyle='-', alpha=1, label='')
     axs[0].set_ylim(0, 1.1* EBBlmean.max())
     axs[0].axhline(y=EBBTxo, color='black', linewidth=1, linestyle=':', alpha=0.5, label='')
-    axs[0].text(tsize*0.95, 1.05*EBBTxo, f'$E_BB(Txo)$ = {EBBTxo:.1e} J, $M_E$ = {e2Me(EBBTxo):.2f}', horizontalalignment='right')
+    axs[0].text(tsize*0.95, 1.05*EBBTxo, '$E(T_{XO}$) = %.1e J, $M_E$ = %.2f' % (EBBTxo,e2Me(EBBTxo)) , horizontalalignment='right')
     axs[0].text(tsize*0.95,0.09*EBBlmean.max(), f"N stats used = {Event.nBBlmean}", horizontalalignment='right')
     axs[0].text(tsize*0.95,0.03*EBBlmean.max(), f"f-band ({labelbb})", horizontalalignment='right')
     
-    title=Event.origin[1].strftime("%Y/%m/%d %H:%M:%S")+" ("+str(Event.eventname)+f") at {Event.origin[0][0]:.2f}°, {Event.origin[0][1]:.2f}°, Z={Event.origin[0][2]:.1f} "
+    title=Event.origin[1].strftime("%Y/%m/%d %H:%M:%S")+" ("+str(Event.eventname)+f") at {Event.origin[0][0]:.2f}°, {Event.origin[0][1]:.2f}°, Z={Event.origin[0][2]:.1f} km "
     axs[0].set_title(title)
 
     # right side of plot
@@ -458,11 +458,12 @@ def ETxoplot(EBBlmean,EHFlmean,upFitResults,downFitResults,Event=event(),Default
     Ebb_ticks = [10 ** ((me + 2.9) * 1.5) for me in tick_labels]
     ax0r.set_yticks(Ebb_ticks)
     ax0r.set_yticklabels(tick_labels)
-    ax0r.set_ylabel("$M_Ebb$ (BB Energy Magnitude)")
+    ax0r.set_ylabel("$M_E$ (BB Energy Magnitude)")
     ax0r.tick_params(axis='y', colors='black')
     ax0r.spines['right'].set_color('black')
     ax0r.set_ylim(0, 1.1* EBBlmean.max())  # set limits for Me axis
 
+    #########################################
     # bottom plot
     axs[1].plot(x+prePtime, EHFlmean, label="", color='red',linewidth=3)  # average of all tacer values
     axs[1].plot(x+prePtime, y1_fitFull, '-', label="",color='gray', linewidth=1,alpha=0.5)
@@ -471,16 +472,16 @@ def ETxoplot(EBBlmean,EHFlmean,upFitResults,downFitResults,Event=event(),Default
     axs[1].plot(x2_fit+prePtime, y2_fit, '-', label="", color='black', linewidth=3, alpha=0.5)
     axs[1].set_ylim(0, 1.1* EHFlmean.max())
     axs[1].set_xlim(0, tsize)
-    axs[1].axhline(y=EHFTxo, color='black', linewidth=1, linestyle=':', alpha=0.5, label=f'ETxo = {EHFTxo:.1e}s')
-    axs[1].text(tsize*0.95, 1.05*EHFTxo, f'$E(Txo)$ = {EHFTxo:.1e} J, $M_E$ = {e2Me(EHFTxo,eCorrection=HFEcorr):.2f}', horizontalalignment='right')
+    axs[1].axhline(y=EHFTxo, color='black', linewidth=1, linestyle=':', alpha=0.5, label='')
+    axs[1].text(tsize*0.95, 1.05*EHFTxo, '$E_{hf}(T_{XO})$ = %.1e J, $M_{Ehf}$ = %.2f' % (EHFTxo, e2Me(EHFTxo,eCorrection=HFEcorr) ), horizontalalignment='right')
 
-    axs[1].axvline(x=Txo, color='black', linewidth=3, linestyle='-', alpha=1, label=f'Txo = {Txo:.2f}s')
+    axs[1].axvline(x=Txo, color='black', linewidth=3, linestyle='-', alpha=1, label='')
     axs[1].set_xlabel("Time from Theoretical P-arrival [s]")
     axs[1].set_ylabel("Cumulative HF Energy")
     axs[1].text(tsize*0.95,0.09*EHFlmean.max(), f"N stats used = {Event.nHFlmean}", horizontalalignment='right')
     axs[1].text(tsize*0.95,0.03*EHFlmean.max(), f"f-band ({labelhf})", horizontalalignment='right')
     
-    axs[1].text(Txo+5,0.05*EHFlmean.max(), f"Txo= {Txo:.1f} s", horizontalalignment='left', rotation=90)
+    axs[1].text(Txo+0.02*Defaults.waveparams[1][1],0.05*EHFlmean.max(), '$T_{XO}$ = %.2f s' % (Txo) , horizontalalignment='left', rotation=90)
 
     # right side of plot
     ax1r = axs[1].twinx()
@@ -494,7 +495,7 @@ def ETxoplot(EBBlmean,EHFlmean,upFitResults,downFitResults,Event=event(),Default
     Ehf_ticks = np.array(Ehf_ticks)/HFEcorr  # correct for HFEcorr
     ax1r.set_yticks(Ehf_ticks)
     ax1r.set_yticklabels(tick_labels)
-    ax1r.set_ylabel("$M_Ehf$ (HF Energy Magnitude)")
+    ax1r.set_ylabel("$M_{Ehf}$ (HF Energy Magnitude)")
     ax1r.tick_params(axis='y', colors='black')
     ax1r.spines['right'].set_color('black')
     ax1r.set_ylim(0, 1.1* EHFlmean.max())  # set limits for Me axis
