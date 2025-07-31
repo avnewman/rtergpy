@@ -14,7 +14,7 @@ Defaults=defaults()
 Event=event()
 Defaults.src='IRIS'
 #Defaults.src='NEIC'
-Event.newData=False # True is default
+Event.newData=True # True is default
 Event.ecount='00'
 edateold=""
 # events older than available in NEIC

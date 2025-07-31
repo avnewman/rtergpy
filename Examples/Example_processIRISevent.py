@@ -16,16 +16,17 @@ Event=event()
 Defaults.src='IRIS'
 # 2021 Haiti EQ *Mw 7.2)
 # 21081402 2021/08/14 12:29:08  18.56  -73.55   10.0
-#eloc = [18.56,-73.55,10] 
-#etime= UTCDateTime(2021,8,14,12,29,8) 
-eloc = [21.12, 95.98,20.1] 
-etime= UTCDateTime(2025,3,28,6,20,54) 
+# Chignik_20210729
+eloc = [55.364, -157.888, 32.2]  # lat, lon, depth in km
+etime = UTCDateTime(2021, 7, 29, 6, 15, 49)  # Chignik_20210729 UTC time
 Event.ecount='00'
-Event.focmech=[353, 60,175] # phi,delta,lmbda
-Event.newData=True
-Event.newData=False   # use already downloaded data
+Event.newData=True   # use already downloaded data
+#Event.newData=True
 Event.eventname=etime2name(etime,ecount=Event.ecount)
 Event.origin=[eloc,etime]
+# Event.focmech=[266, 51, 34] # phi,delta,lmbda
+
+
 
 print(Event.eventname)
 src2ergs(Defaults=Defaults,Event=Event)  # need to export run output in a coherent way
