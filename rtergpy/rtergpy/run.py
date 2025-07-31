@@ -231,6 +231,9 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     elif Event.Mi > 8 : 
         Defaults.waveparams[1][1]=500
 
+    if Event.focmech is False :
+        Event.focmech = [0,30,90] #using generic mechanism (thrust)
+        print("WARNING: No mechanism found, setting to a default")
 
     if Event.newData:
         print("Getting waveforms")
@@ -430,8 +433,10 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 
     # Create plots  
     print("Making figures\n")
+
     if not os.path.exists('figs'):   # create and go into pkls dir
         os.mkdir('figs')
+    
     os.chdir('figs')
     if not showPlots:
         mpl.use('Agg')  # needed to plot without using the X-session
@@ -478,8 +483,7 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     #    stationEmapPygmt(EBB,Event.origin[0],trdf,eventname,ttimeHF, prePtime=prePtime,cutoff=15,itername=Event.iter,show=showPlots)
     except IOError as err:
         print("ERROR: Map Plot for "+eventname+":",e)
-
-    os.chdir('..')
+    os.chdir(edirit)
 
     # Saving information  ################################
     # create dataframe with Event based results
@@ -526,12 +530,13 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
         # csv  
         if not os.path.exists('csvs'):   # create and go into pkls dir
             os.mkdir('csvs')
+
         os.chdir('csvs')  
         results.to_csv("Results_"+eventname+".csv")
         Etimeseries.to_csv("EStationTimeSeries_"+eventname+".csv")
         StationTacer.to_csv("ETacer_"+eventname+".csv")
         Ecumtimeseries.to_csv("ECumulativeTimeSeries_"+eventname+".csv") 
-        os.chdir('..')
+        os.chdir(edirit)
         # pkls 
         if not os.path.exists('pkls'):   # create and go into pkls dir
             os.mkdir('pkls')
@@ -540,7 +545,7 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
         Etimeseries.to_pickle("EStationTimeSeries_"+eventname+".pkl")
         StationTacer.to_pickle("ETacer_"+eventname+".pkl")
         Ecumtimeseries.to_csv("ECumulativeTimeSeries_"+eventname+".csv") 
-        os.chdir('..')
+        os.chdir(edirit)
     except:
         print("ERROR: writing results for"+eventname)
     os.chdir(origwd)  # go back to old directory

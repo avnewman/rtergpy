@@ -235,6 +235,8 @@ def stationEmapPygmt(E, trdf, ttime, Event=event(), Defaults=defaults(),prefix="
     # fig.plot(x=eloc[1],y=eloc[0], style="a0.85c",fill="green",pen="1p,black", transparency=50)
 
     # plot event focal mechanism location in center
+    if (Mw is None) or (Mw == 0):
+        Mw = Me
     emech=dict(strike=focmech[0], dip=focmech[1], rake=focmech[2], magnitude=Mw)
     fig.meca(emech, scale="0.6c", 
           longitude=eloc[1], latitude=eloc[0],depth=0,
