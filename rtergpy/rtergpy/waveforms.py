@@ -14,6 +14,7 @@ from scipy.stats import gmean
 from tqdm import tqdm
 from compress_pickle import dump as cpkldump # reading/writing compressed pickles
 #from compress_pickle import load as cpklload # reading/writing compressed pickles
+from obspy import read
 import os
 import numpy as np
 import pandas as pd
@@ -28,6 +29,113 @@ Event=event()
 #prePtime=-60; postPtime=300
 #pwindow=[prePtime,postPtime]
 #resample=10  # samples per second
+
+def process_waves_SeismoGNSS(st, taper=0.05, freqmin=0.01, freqmax=2, Event=None, Defaults=None,
+                              filter_type="bandpass", **kwargs):
+    """
+    Process waveform stream:
+    - For seismogeodetic GNSS: no response removal, convert to velocity and filter.
+    """
+
+    print(" Running process_waves_SeismoGNSS...")
+    
+    stp = st.copy()
+    eloc = Event.eloc
+    etime = Event.etime
+
+    clean_stream = Stream()
+        
+    for tr in st:
+        try:
+            coords = tr.stats.coordinates
+            slat = float(coords.get("latitude"))
+            slon = float(coords.get("longitude"))
+            elev = float(coords.get("elevation", 0.0))
+            sloc = (slat, slon, max(-elev / 1000.0, 0.0))
+            
+            distmeters, az, baz = ll2az(eloc[0], eloc[1], slat, slon)
+         
+            try:
+                Ptime, Ptoa, Prayp, Pinc, distdeg = theorPinfo(eloc, etime, sloc)
+                used_fallback = False
+            except Exception as ve:
+                print(f" TauP failed for {tr.id}: {ve} — using straight-line fallback")
+                Ptime, Ptoa, Prayp, Pinc, distdeg = theorPinfo_simple(eloc, etime, sloc)
+                used_fallback = True
+                
+            # Store metadata into trace
+            tr.stats.distance = distmeters
+            tr.stats.distdeg = distdeg
+            tr.stats.phasePtime = Ptime
+            tr.stats.ptoa = Ptoa
+            tr.stats.prayp = Prayp
+            tr.stats.pinc = Pinc
+            tr.stats.coordinates = {'latitude': slat, 'longitude': slon}
+            tr.stats.az = az
+            tr.stats.baz = baz
+
+            # Define TACER window and slice trace
+            start_time = Ptime + Defaults.waveparams[1][0]
+            end_time = Ptime + Defaults.waveparams[1][1]
+            tr_slice = tr.slice(starttime=start_time, endtime=end_time)
+    
+            # Check for empty or NaN-only traces
+            if len(tr_slice) == 0 or np.all(np.isnan(tr_slice.data)):
+                print(f" No usable data in TACER window for {tr.id}, skipping.")
+                continue
+    
+            tr_slice.stats = tr.stats  # carry over metadata to sliced trace
+            clean_stream.append(tr_slice)
+
+        except Exception as e:
+            print(f" Skipping {tr.id} due to error: {e}")
+            continue
+
+    
+    stp = Stream()  # initialize empty stream
+    print(" Skipping response removal – converting streams to velocity...")
+    for tr in clean_stream:
+        net_sta = f"{tr.stats.network}.{tr.stats.station}.{tr.stats.channel}"
+        max_amp = np.max(np.abs(tr.data))
+        dist_km = tr.stats.distance / 1000.0 if hasattr(tr.stats, "distance") else np.nan
+        # print(f"{tr.stats.station} | Distance: {dist_km:.2f} km | Max Amplitude before converting: {max_amp:.2e} | Units: Counts/(m/s)")
+        tr = convert_SeismoGNSS(tr=tr)
+        max_amp = np.max(np.abs(tr.data))
+        # print(f"{tr.stats.station} | Max Amplitude after converting: {max_amp:.2e} | Units: m/s")
+    
+        stp.append(tr)  # Add converted trace to output stream
+
+    try:
+        if freqmin < 0.00001:
+            stp.filter("lowpass", freq=freqmax, **kwargs)
+        else:
+            stp.filter(filter_type, freqmin=freqmin, freqmax=freqmax, **kwargs)
+
+    except Exception as e:
+        print(f" Filter failed: {e}")
+        return stp
+    
+    return stp
+    
+def convert_SeismoGNSS(tr):
+    taper = 0.05  # 5% cosine taper
+    hp = 0.1      # Highpass corner frequency in Hz
+    SGgain = 1000 # counts/(m/s) gain ---- change this to a default value later.
+
+    # def myfilt(tr, freq):
+    #     tr.detrend('demean')
+    #     tr.detrend('linear')
+    #     tr.detrend('demean')
+    #     tr.filter('highpass', freq=freq)
+    #     return tr
+
+    tr_proc = tr.copy()
+    tr_proc.detrend('polynomial', order=5)
+    tr_proc.taper(taper)
+    tr_proc.data = tr_proc.data / SGgain  
+    # tr_proc = myfilt(tr_proc, hp)
+    
+    return tr_proc
 
 def process_waves(st,taper=0.05, freqmin=0.01, freqmax=2, **kwargs):
     """
@@ -73,6 +181,50 @@ def theorPinfo(eloc,etime,sloc):
     distdeg=arrivals[0].distance
     return  ptime,toa,rayp,inc,distdeg
 
+def theorPinfo_simple(eloc, etime, sloc, vp=6.0):
+    """
+    TauP-free fallback: Estimates P-wave arrival time and basic ray parameters. Helpful for nearfield.
+    
+    Parameters:
+        eloc : (lat, lon, depth_km)
+        etime : UTCDateTime
+        sloc : (lat, lon, elevation_km)
+        vp : assumed P-wave velocity (km/s)
+        
+    Returns:
+        Ptime : UTCDateTime
+        toa   : takeoff angle (degrees)
+        rayp  : ray parameter (s/deg, approximated)
+        inc   : incidence angle (degrees)
+        distdeg : distance in degrees
+    """
+    elat, elon, edep = map(float,eloc)
+    slat, slon, selev = map(float,sloc)  # elevation above sea level
+    sdepth = -selev  # convert to km below surface
+
+    # --- 1. Horizontal distance ---
+    dist_m, az, baz = ll2az(elat, elon, slat, slon)
+    dist_km = dist_m / 1000.0
+    distdeg = max(dist_km / 111.19, 1e-3)  # approx deg
+
+    # --- 2. Total hypocentral distance ---
+    dz = max(edep - sdepth, 1e-3)
+    hyp_dist_km = np.sqrt(dist_km**2 + dz**2)
+
+    # --- 3. Travel time ---
+    travel_time = hyp_dist_km / vp  # seconds
+    Ptime = etime + travel_time
+
+    # --- 4. Takeoff angle (from vertical at source) ---
+    toa = np.degrees(np.arctan2(dist_km, dz))  # upward angle from vertical
+
+    # --- 5. Ray parameter (s/deg), rough approx
+    rayp = travel_time / distdeg 
+
+    # --- 6. Incidence angle at receiver (assuming flat geometry) ---
+    inc = np.degrees(np.arctan2(dz, dist_km))  # downward angle from vertical
+
+    return Ptime, toa, rayp, inc, distdeg
 
 def get_respinv(network,eloc,etime,rads,chan,src="IRIS",**kwargs):
     """
@@ -124,7 +276,15 @@ def downloadwaves(inventory,eloc,etime,pwindow=Defaults.waveparams[1],src=Defaul
         slat,slon,sz,sldep=inventory.get_coordinates(chan).values()
         sheight=sz-sldep
         sloc=slat,slon,sheight
-        Ptime,Ptoa,Prayp,Pinc,distdeg=theorPinfo(eloc,etime,sloc)
+        
+        try:
+            Ptime, Ptoa, Prayp, Pinc, distdeg = theorPinfo(eloc, etime, sloc)
+            used_fallback = False
+        except Exception as ve:
+            print(f" TauP failed for {chan}: {ve} — using straight-line fallback")
+            Ptime, Ptoa, Prayp, Pinc, distdeg = theorPinfo_simple(eloc, etime, sloc)
+            used_fallback = True
+
         StartTime=Ptime+pwindow[0]
         EndTime=Ptime+pwindow[1]
         distmeters,az,baz=ll2az(eloc[0],eloc[1],slat,slon)
@@ -152,6 +312,7 @@ def downloadwaves(inventory,eloc,etime,pwindow=Defaults.waveparams[1],src=Defaul
                 stlocal[0].stats.distdeg=distdeg;  # UTC time of P-arrival
                 stlocal[0].stats.az=az;  # azimuth
                 stlocal[0].stats.baz=baz;  # back-azimuth
+                stlocal[0].stats.used_fallback = used_fallback
                 st+=stlocal[0]
             except:
                 print ("Channel ", chan, " not added...missing metadata")
@@ -187,8 +348,20 @@ def gttP(depkm,distdeg):
   """
   returns travel time in seconds given event depth (km) and distance (degrees)
   """
-  tt=model.get_travel_times(source_depth_in_km=depkm,distance_in_degree=distdeg,phase_list="P")[0].time
-  return tt
+
+  try:
+        tt=model.get_travel_times(source_depth_in_km=depkm,distance_in_degree=distdeg,phase_list="P")[0].time
+        if not np.isfinite(tt):
+            raise ValueError("TauP returned no valid arrival time")
+        return tt
+  except Exception as e:
+        print(f" TauP failed for depth={depkm:.1f} km, dist={distdeg:.4f}°. Using fallback: {e}")
+        # Fallback: great-circle distance in km
+        dist_km = distdeg * 111.19
+        hyp_dist_km = np.sqrt(dist_km**2 + depkm**2)
+        fallback_tt = hyp_dist_km / vp
+        return fallback_tt  
+
 
 def georpz(edist,edepth,p,alphar,betar,rhor,rearth):
   """
@@ -248,8 +421,11 @@ def getFgP2(tr, Defaults=Defaults, Event=Event, FgP2min=0.2, **kwargs):
     qbc=Defaults.qbc
     p,g,rpz,fp,fpp,fsp,PP,SP=bc10(edistdeg,edepth,phi,delta,lmbda,eqaz,rho_site,pvel_site,rearth)
     FgP2calc=fp**2+(fpp*PP)**2+(2/(3*aob))*qbc*((SP*fsp)**2)
-    if (FgP2calc<FgP2min):
-        FgP2calc=FgP2min  # avoid blow-up
+    if np.isnan(FgP2calc):
+        print(f" FgP2 is NaN for {tr.id} at distance {edistdeg:.2f}° / {edistdeg * 111.19:.2f} km")
+        return None  # Skip this trace
+    elif FgP2calc < FgP2min:
+        FgP2calc = FgP2min  # avoid blow-up
     # geometric spreading and near-surface excitation
     geomsp=g*rpz
     return FgP2calc,g,rpz,geomsp
@@ -520,7 +696,117 @@ def loadwaves(Defaults=Defaults, Event=Event, **kwargs):
         if file.startswith("Params_"+eventname):
             df=pd.read_pickle(fpath)
     return st,df
+def load_seismoGNSS_waves(*, Defaults, Event, event_mseed, df_path):
 
+    """
+    Loads GNSS seismogeodetic MiniSEED velocity waveforms and associated metadata.
+    Assigns coordinates from metadata to traces and builds Event.sloc dictionary.
+
+    Returns:
+        st_gnss (Stream): ObsPy stream with coordinates assigned.
+        df (DataFrame): Metadata table.
+    """
+
+    # === Load metadata CSV ===
+    df = pd.read_csv(df_path, skiprows=1, delimiter=",", header=None)
+    df.columns = [
+        "GNSS_network", "GNSS_station", "Latitude_gnss", "Longitude_gnss", "Ellips_height(m)",
+        "Sampling_rate(Hz)", "Gain(counts/(m/s))",
+        "Seismic_network", "Seismic_station", "Latitude_seis", "Longitude_seis", "Elevation_seis"
+    ]
+
+    # === Read all MiniSEED files and assign GNSS/Seismic names ===
+    st_gnss = Stream()
+    for fname in os.listdir(event_mseed):
+        if fname.endswith(".mseed"):
+            gnss_name, seis_name = fname.split("_")[0], fname.split("_")[1].split(".")[0]
+            stream = read(os.path.join(event_mseed, fname))
+            for tr in stream:
+                tr.stats.gnss_station = gnss_name.strip().upper()
+                tr.stats.seis_station = seis_name.strip().upper()
+            st_gnss += stream
+
+    # === Normalize metadata station names ===
+    df["GNSS_station"] = df["GNSS_station"].astype(str).str.strip().str.upper()
+    df["Seismic_station"] = df["Seismic_station"].astype(str).str.strip().str.upper()
+
+    # === Build GNSS-to-seismic metadata map ===
+    gnss_map = {
+        str(row["GNSS_station"]): {
+            "lat": row["Latitude_seis"],
+            "lon": row["Longitude_seis"],
+            "elev": row["Elevation_seis"],
+            "seis_name": row["Seismic_station"]
+        }
+        for _, row in df.iterrows()
+    }
+
+    # === Normalize trace GNSS station name ===
+    def normalize_trace_gnss(name):
+        name = name.strip().upper()
+        return str(int(name)) if name.isdigit() else name
+
+    # === Assign coordinates to each trace ===
+    for tr in st_gnss:
+        norm_gnss = normalize_trace_gnss(tr.stats.gnss_station)
+        if norm_gnss in gnss_map:
+            info = gnss_map[norm_gnss]
+            tr.stats.coordinates = {
+                "latitude": info["lat"],
+                "longitude": info["lon"],
+                "elevation": info["elev"]
+            }
+        else:
+            print(f" GNSS station {norm_gnss} not found in metadata for {tr.id}")
+
+        tr.stats.netstachan = f"{tr.stats.network}.{tr.stats.station}.{tr.stats.channel}"
+    
+    # Extract range in degrees from Defaults
+    min_deg, max_deg = Defaults.stationrange
+    
+    # Filter stream to include only stations within specified distance range
+    filtered_traces = []
+    for tr in st_gnss:
+        sta = tr.stats.station
+        coords = getattr(tr.stats, "coordinates", {})
+        lat, lon, elev = coords.get("latitude"), coords.get("longitude"), coords.get("elevation")
+        eq_lat, eq_lon, eq_depth = Event.eloc
+       
+        deg = l2d(eq_lat, eq_lon, lat, lon)
+
+        if min_deg <= deg <= max_deg:
+            filtered_traces.append(tr)
+    
+    print(f"Total traces after filtering: {len(st_gnss)}")
+
+    # Replace st_gnss with filtered stream
+    st_gnss = Stream(traces=filtered_traces)
+    
+    print(f" {len(st_gnss)} traces within {min_deg}-{max_deg}° of epicenter")
+
+    
+    # === Build Event.sloc from stream coordinates ===
+    Event.sloc = {}
+    for tr in st_gnss:
+        sta = tr.stats.station
+        coords = getattr(tr.stats, "coordinates", {})
+        lat, lon, elev = coords.get("latitude"), coords.get("longitude"), coords.get("elevation")
+        if None not in (lat, lon, elev):
+            Event.sloc[sta] = [lat, lon, -elev / 1000.0]  # elevation to depth (km)
+        else:
+            print(f" Missing coordinate values for station {sta}, skipping in Event.sloc")
+
+    print(f" Loaded seismogeodetic data for {Event.eventname}")
+
+    # === Process waveforms (TauP, azimuth, etc.) ===
+    print(" Processing GNSS stream...")
+    st_processed = process_waves_SeismoGNSS(
+        st_gnss,
+        Event=Event,
+        Defaults=Defaults,
+    )
+    
+    return st_processed, df
 def wave2energytinc(tr,Defaults=Defaults, Event=Event, fband=Defaults.waveparams[0][0], **kwargs):
   """
   calculate estimated earthquake energy as a function of time using 
@@ -556,7 +842,11 @@ def wave2energytinc(tr,Defaults=Defaults, Event=Event, fband=Defaults.waveparams
   t1cut=tr.stats.phasePtime+prePtime
   t2cut=tr.stats.phasePtime+postPtime
   trslice=tr.slice(t1cut,t2cut)
-  tr=process_waves(trslice,freqmin=fmin,freqmax=fmax)
+  if getattr(Event, "is_seismogeodetic", False):
+      # GNSS data is already velocity (and likely squared), skip reprocessing
+      tr = trslice
+  else:
+      tr = process_waves(trslice, freqmin=fmin, freqmax=fmax)
   trf=fft(tr)
   # # recreating obspy.freqatributes.spectrum
   n1=0; n2=len(tr)
@@ -567,7 +857,12 @@ def wave2energytinc(tr,Defaults=Defaults, Event=Event, fband=Defaults.waveparams
 
   # focal and distance corrections, 
   # focal corrections
-  FgP2,g,rpz,geomsp=getFgP2(tr, Defaults=Defaults, Event=Event)
+  fgp2_result = getFgP2(tr, Defaults=Defaults, Event=Event)
+  if fgp2_result is None:
+    print(f"Skipping trace {tr.id} due to invalid FgP2 (from inside wave2energytinc)")
+    return None, None, None, None 
+  FgP2, g, rpz, geomsp = fgp2_result
+  # print(f" Teleseismic correction disabled: est2corr = {est2corr}")
   # distance-based FgP2estimate
   estFgP2=estFgPcorrect(edistdeg)
   
@@ -626,10 +921,11 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
         estFgP2=[0]*len(st)
         FgP2=[0]*len(st)
         est2corr=[0]*len(st)
+
         i = 0
         for tr in tqdm(st):
             # calc cum. energy and save in dictionary
-            netstatchan[i]=str(tr).split(" | ")[0]
+            netstatchan[i] = str(tr).split(" | ")[0]
             Ergs=wave2energytinc(tr, Defaults, Event, fband=fband)
             # pad energy results with zeros for any waveforms that run short
             Epersec=list(Ergs[0])
@@ -642,6 +938,9 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
             FgP2[i]=Ergs[2]
             est2corr[i]=Ergs[3]
             i += 1
+        
+        print("final len est2corr", len(est2corr))
+
         tempEdf = pd.DataFrame(tempEdf_dict)
         dfdict={"netstatchan":netstatchan,"fband"+fbandlabel:fbandlist,"waveparams":waveparamlist,
             "estFgP2":estFgP2,"FgP2":FgP2,"est2corr":est2corr}
@@ -707,7 +1006,8 @@ def tacer(dE,prePtime=60, **kwargs):
         itr += 1
         progressbar.update(1)
     progressbar.close()
-    tacerout = pd.DataFrame(tacerout_dict)
+    # Convert dictionary to DataFrame in one go
+    tacerout = pd.concat({k: pd.Series(v) for k, v in tacerout_dict.items()}, axis=1)
     return tacerout
 
 def tacerstats(tacer):

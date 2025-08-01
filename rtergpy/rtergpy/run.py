@@ -210,7 +210,7 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     src2ergs(Defaults=Defaults,Event=Event)
     """
     from rtergpy.waveforms import getwaves,ErgsFromWaves,loadwaves,gmeanCut,tacer,tacerstats
-    from rtergpy.waveforms import trstat2pd,e2Me,eventdir
+    from rtergpy.waveforms import trstat2pd,e2Me,eventdir, load_seismoGNSS_waves
     from rtergpy.plotting import tacerplot,Edistplot,Ehistogram,Eazplot, stationEmapPygmt, fbandlabels, Efluxplots,ETxoplot
     from scipy.interpolate import interp1d
     import numpy as np
@@ -219,7 +219,7 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     import os
     
     eventname=Event.eventname
-
+    
     # reset some parameters based on EQ size
     # set initial magnitude to Mw if Mw is big and Mi is not
     if (Event.Mi < 1) and (Event.Mw > 1) :
@@ -234,19 +234,26 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     if Event.focmech is False :
         Event.focmech = [0,30,90] #using generic mechanism (thrust)
         print("WARNING: No mechanism found, setting to a default")
-
-    if Event.newData:
-        print("Getting waveforms")
-        st,df=getwaves(Defaults=Defaults,Event=Event)
+    
+    if getattr(Event, "is_seismogeodetic", False):
+        print("Using seismo-geodetic waveforms provided externally (no download).")
+        st, df = load_seismoGNSS_waves(Defaults=Defaults, Event=Event, event_mseed=Event.mseed, df_path=Event.dfpath)
+    
+        if st is None or df is None:
+            raise ValueError("Seismogeodetic mode requires st and df to be passed to src2ergs.")
     else:
-        print("Loading locally stored waveforms")
-        try:
-            st,df=loadwaves(Defaults=Defaults,Event=Event) 
-        except:
-            print("Couldn't load data for "+eventname+". Attempting to download:")
+        if Event.newData:
+            print("Getting waveforms")
             st,df=getwaves(Defaults=Defaults,Event=Event)
-    if len(st) == 0:
-        raise Exception("ERROR: No waveforms retreived.") 
+        else:
+            print("Loading locally stored waveforms")
+            try:
+                st,df=loadwaves(Defaults=Defaults,Event=Event) 
+            except:
+                print("Couldn't load data for "+eventname+". Attempting to download:")
+                st,df=getwaves(Defaults=Defaults,Event=Event)
+        if len(st) == 0:
+            raise Exception("ERROR: No waveforms retreived.") 
     #runiter= iterate()
         # runiter.count gives current count
         # runiter.str() gives as a 2digit string leading zero
@@ -298,14 +305,15 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     ttimes,meds = tacerstats(tacerHF) 
     ttimeHF,ttimeHF25,ttimeHF75=ttimes
     print("Median Tacer time = %.1f -/+ %.1f/%.1f s (25/75th percentile)" %(ttimeHF,ttimeHF25,ttimeHF75))
-    
+
     intval=int(ttimeHF-prePtime)  # median tacer time from start of waveforms
     ebbmedtac=np.array(EBB.iloc[intval])  # list of EBB values at *median* tacer
-    ehfmedtac=np.array(EHF.iloc[intval])  # list of EBB values at *median* tacer
+    ehfmedtac=np.array(EHF.iloc[intval])  # list of EHF values at *median* tacer
+   
     # corrected values for focmech
     ebbcorrmedtac=np.array(list(ebbmedtac*np.array(Emd.est2corr)))
     ehfcorrmedtac=np.array(list(ehfmedtac*np.array(Emd.est2corr)))
- 
+
     # Energy values at per station tacer
     ebbpertac=[]
     ehfpertac=[]
