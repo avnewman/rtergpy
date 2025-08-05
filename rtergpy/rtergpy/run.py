@@ -97,7 +97,7 @@ class event:
         self.Me=0
         self.ttime=0
 
-def logmeanEnergy(E, Defaults=defaults(), cutoff=15, **kwargs):
+def logmeanEnergy(E, Defaults=defaults(), **kwargs):
     """Calculate the log mean of energy E, excluding values below the cutoff"""
     cutoff = Defaults.cutoff
     
@@ -435,8 +435,8 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 
         # should create results that are the same/similar to before.  We would average only results withing 15x the original geometric mean.
         print("Calculating log mean of EBB and EHF energies for cumulative growth curves")
-        EBBlmean,nBBlmean=logmeanEnergy(EBB, cutoff=Defaults.cutoff)
-        EHFlmean,nHFlmean=logmeanEnergy(EHF, cutoff=Defaults.cutoff)
+        EBBlmean,nBBlmean=logmeanEnergy(EBB)
+        EHFlmean,nHFlmean=logmeanEnergy(EHF)
         Event.nBBlmean=nBBlmean
         Event.nHFlmean=nHFlmean
 
