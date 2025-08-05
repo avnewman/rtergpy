@@ -357,7 +357,7 @@ def gttP(depkm,distdeg):
   except Exception as e:
         print(f" TauP failed for depth={depkm:.1f} km, dist={distdeg:.4f}°. Using fallback: {e}")
         # Fallback: great-circle distance in km
-        vp = 6
+        vp = 6.0 # nearfield P-wave velocity in km/s
         dist_km = distdeg * 111.19
         hyp_dist_km = np.sqrt(dist_km**2 + depkm**2)
         fallback_tt = hyp_dist_km / vp
@@ -633,7 +633,7 @@ def getwaves(Defaults=Defaults, Event=Event, **kwargs):
         trfilt.detrend('demean')           # preprocess data
 
         snrtr = signal2noise(trfilt, rPtime=rPtime, window=rPtime/2)
-        print("Trace SNR = ", snrtr, total)
+        #print("Trace SNR = ", snrtr, total)
         if snrtr >= snrthreshold:
             sttemp = Stream(traces=[tr])
             stlocal += sttemp
@@ -925,11 +925,10 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
         estFgP2=[0]*len(st)
         FgP2=[0]*len(st)
         est2corr=[0]*len(st)
-
         i = 0
         for tr in tqdm(st):
             # calc cum. energy and save in dictionary
-            netstatchan[i] = str(tr).split(" | ")[0]
+            netstatchan[i]=str(tr).split(" | ")[0]
             Ergs=wave2energytinc(tr, Defaults, Event, fband=fband)
             # pad energy results with zeros for any waveforms that run short
             if Ergs is None or Ergs[0] is None:
@@ -945,7 +944,6 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
             FgP2[i]=Ergs[2]
             est2corr[i]=Ergs[3]
             i += 1
-
         tempEdf = pd.DataFrame(tempEdf_dict)
         dfdict={"netstatchan":netstatchan,"fband"+fbandlabel:fbandlist,"waveparams":waveparamlist,
             "estFgP2":estFgP2,"FgP2":FgP2,"est2corr":est2corr}
@@ -958,7 +956,6 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
             EHF=tempEdf
             EHFmd=tempMDdf
     #Emd.rename(columns = {'fband':'fbandBB'}, inplace = True)
-      # Ensure both metadata frames are aligned for insert
     Emd.insert(2, "fbandHF", EHFmd.fbandHF, True)
     return EBB,EHF,Emd
                #print(stationname,step,fband,thisE)

@@ -345,7 +345,7 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     # corrected values for focmech
     ebbcorrmedtac=np.array(list(ebbmedtac*np.array(Emd.est2corr)))
     ehfcorrmedtac=np.array(list(ehfmedtac*np.array(Emd.est2corr)))
-   
+    
     # Energy values at per station tacer
     ebbpertac=[]
     ehfpertac=[]
@@ -355,6 +355,7 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 
     ebbcorrpertac=np.array(list(ebbpertac*np.array(Emd.est2corr)))
     ehfcorrpertac=np.array(list(ehfpertac*np.array(Emd.est2corr)))
+
 
     # cutoff=15 # 15x +/-  # moved into defaults
     cutoff=Defaults.cutoff
@@ -442,9 +443,11 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 
         if (nBBlmean > 0) and (nHFlmean > 0) : 
             # Extract best window fit info
-            windowUp= np.arange(5, 60, 5)
+            fullwindow=int(Defaults.waveparams[1][1]+Defaults.waveparams[1][0])
+            halfwindow=int(fullwindow/2)
+            windowUp= np.arange(5, halfwindow, 5)
             upResults=bestWindow(EHFlmean, windows=windowUp, starttime=0-prePtime, minwindow=10, choice="MaxSlope") # find the best fit and window for the up-slope (controlled in part by prePtime and window choices)
-            windowDown= np.arange(50,300,5)
+            windowDown= np.arange(halfwindow,fullwindow,5)
             downResults=bestWindow(EHFlmean, windows=windowDown, excludeLast=60,choice="MinMisfit", startTime=upResults[2]+upResults[0]) # find the best fit and window for the down-slope (controlled in part by prePtime and window choices)
 
             # Extract best window fit info
