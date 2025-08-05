@@ -54,6 +54,7 @@ def tacerplot(tacer,trdf,ttimes,meds,eventname,amp=50,show=True, **kwargs):
     while i < len(tacer.columns):
         az=float(trdf[trdf['netstatchan'] == tacer.columns[i]]['az']) # azimuth (need to search since some are dropped) 
         [dist]=list(trdf['distance'][trdf['netstatchan'] == tacer.columns[i]])
+
         norm=tacer.iloc[:,i]/max(tacer.iloc[:,i])
         plt.plot(amp*(norm-1)+az, '-', color='red', lw=0.8, alpha=0.6) 
         plt.plot(meds.iloc[i,1],az, 'r|', alpha=1) 

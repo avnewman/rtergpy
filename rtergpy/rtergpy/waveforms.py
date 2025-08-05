@@ -201,7 +201,7 @@ def theorPinfo_simple(eloc, etime, sloc, vp=6.0):
     elat, elon, edep = map(float,eloc)
     slat, slon, selev = map(float,sloc)  # elevation above sea level
     sdepth = -selev  # convert to km below surface
-
+    vp=6.0
     # --- 1. Horizontal distance ---
     dist_m, az, baz = ll2az(elat, elon, slat, slon)
     dist_km = dist_m / 1000.0
@@ -357,6 +357,7 @@ def gttP(depkm,distdeg):
   except Exception as e:
         print(f" TauP failed for depth={depkm:.1f} km, dist={distdeg:.4f}°. Using fallback: {e}")
         # Fallback: great-circle distance in km
+        vp = 6
         dist_km = distdeg * 111.19
         hyp_dist_km = np.sqrt(dist_km**2 + depkm**2)
         fallback_tt = hyp_dist_km / vp
@@ -725,6 +726,9 @@ def load_seismoGNSS_waves(*, Defaults, Event, event_mseed, df_path):
                 tr.stats.gnss_station = gnss_name.strip().upper()
                 tr.stats.seis_station = seis_name.strip().upper()
             st_gnss += stream
+    
+    # --- Merge any segments for the same NET.STA.LOC.CHA ---
+    st_gnss.merge(method=1, fill_value=None)
 
     # === Normalize metadata station names ===
     df["GNSS_station"] = df["GNSS_station"].astype(str).str.strip().str.upper()
@@ -928,6 +932,9 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
             netstatchan[i] = str(tr).split(" | ")[0]
             Ergs=wave2energytinc(tr, Defaults, Event, fband=fband)
             # pad energy results with zeros for any waveforms that run short
+            if Ergs is None or Ergs[0] is None:
+                print(f"[warn] wave2energytinc returned None for {netstatchan[i]}, skipping.")
+                continue
             Epersec=list(Ergs[0])
             Epersec=(Epersec+nsamples *[0])[:nsamples]
             tempEdf_dict[netstatchan[i]] = Epersec
@@ -938,8 +945,6 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
             FgP2[i]=Ergs[2]
             est2corr[i]=Ergs[3]
             i += 1
-        
-        print("final len est2corr", len(est2corr))
 
         tempEdf = pd.DataFrame(tempEdf_dict)
         dfdict={"netstatchan":netstatchan,"fband"+fbandlabel:fbandlist,"waveparams":waveparamlist,
@@ -953,6 +958,7 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
             EHF=tempEdf
             EHFmd=tempMDdf
     #Emd.rename(columns = {'fband':'fbandBB'}, inplace = True)
+      # Ensure both metadata frames are aligned for insert
     Emd.insert(2, "fbandHF", EHFmd.fbandHF, True)
     return EBB,EHF,Emd
                #print(stationname,step,fband,thisE)

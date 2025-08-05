@@ -22,7 +22,7 @@ eloc = [52.53, 160.165,20.7]
 etime= UTCDateTime(2025,7,29,23,24,50) 
 Event.ecount='00'
 Event.focmech=[198, 18,51] # phi,delta,lmbda
-#Event.newData=False   # use already downloaded data
+# Event.newData=False   # use already downloaded data
 Event.newData=True
 Event.eventname=etime2name(etime,ecount=Event.ecount)
 Event.origin=[eloc,etime]

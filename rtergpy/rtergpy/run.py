@@ -277,7 +277,7 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 
     # work in event directory 
     edirit,origwd=eventdir(Defaults=Defaults,Event=Event,create=False,cd=True)
-
+    df.eventdir = edirit
     # create an array of station data 
     trdf=pd.DataFrame()
     trdf = pd.concat([trstat2pd(tr) for tr in st], ignore_index=True)
@@ -305,15 +305,47 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     ttimes,meds = tacerstats(tacerHF) 
     ttimeHF,ttimeHF25,ttimeHF75=ttimes
     print("Median Tacer time = %.1f -/+ %.1f/%.1f s (25/75th percentile)" %(ttimeHF,ttimeHF25,ttimeHF75))
+    # === Minimal station alignment (no architectural changes) ===
+    # Source of truth = columns present in EBB (i.e., stations that survived energy)
+    station_cols = list(EBB.columns)
+
+    # Reindex EHF to EBB columns (usually already matches; no-op for BB)
+    EHF = EHF.reindex(columns=station_cols)
+
+    # Reindex metadata tables to the same stations and order
+    if isinstance(Emd, pd.DataFrame) and 'netstatchan' in Emd.columns:
+        Emd = (
+            Emd.drop_duplicates(subset=['netstatchan'], keep='first')
+            .set_index('netstatchan')
+            .reindex(station_cols)
+            .reset_index()
+        )
+
+    if isinstance(trdf, pd.DataFrame) and 'netstatchan' in trdf.columns:
+        trdf = (
+            trdf.drop_duplicates(subset=['netstatchan'], keep='first')
+                .set_index('netstatchan')
+                .reindex(station_cols)
+                .reset_index()
+        )
+
+    # If use per-station meds indexed by the original column order, trim to the same stations
+    #    (assumes meds rows correspond to EBB/EHF columns in order)
+    if isinstance(meds, pd.DataFrame) and meds.shape[0] != len(station_cols):
+        if 'netstatchan' in meds.columns:
+            mask = meds['netstatchan'].isin(station_cols)
+            meds = meds.loc[mask].reset_index(drop=True)
+        else:
+            meds = meds.iloc[:len(station_cols)].reset_index(drop=True)
 
     intval=int(ttimeHF-prePtime)  # median tacer time from start of waveforms
     ebbmedtac=np.array(EBB.iloc[intval])  # list of EBB values at *median* tacer
     ehfmedtac=np.array(EHF.iloc[intval])  # list of EHF values at *median* tacer
-   
+    
     # corrected values for focmech
     ebbcorrmedtac=np.array(list(ebbmedtac*np.array(Emd.est2corr)))
     ehfcorrmedtac=np.array(list(ehfmedtac*np.array(Emd.est2corr)))
-
+   
     # Energy values at per station tacer
     ebbpertac=[]
     ehfpertac=[]
@@ -323,7 +355,6 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
 
     ebbcorrpertac=np.array(list(ebbpertac*np.array(Emd.est2corr)))
     ehfcorrpertac=np.array(list(ehfpertac*np.array(Emd.est2corr)))
-
 
     # cutoff=15 # 15x +/-  # moved into defaults
     cutoff=Defaults.cutoff
@@ -395,7 +426,6 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     Event.Me=e2Me(ebbpertacmean)
     Event.ttime=ttimeHF
 
-    
     #.  Create Legecy Txo, Ebb and Ehf from Txo
     try: 
         HFEcorr=Defaults.HFEcorr
@@ -433,11 +463,12 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
         else:
             print("Notice: Insufficient data kept for logmean cumulative energy growth curves. nBBlmean = %i, nHFlmean = %" % ( nBBlmean,nHFlmean))
     except: 
-        print("Notice: Could not creaate Legacy Txo, EBBTxo, or EHFTxo")
+        print("Notice: Could not create Legacy Txo, EBBTxo, or EHFTxo")
 
     Event.EBBTxo=EBBTxo
     Event.EHFTxo=EHFTxo
     Event.Txo=Txo
+
 
     # Create plots  
     print("Making figures\n")
