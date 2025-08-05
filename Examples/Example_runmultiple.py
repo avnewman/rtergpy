@@ -18,11 +18,15 @@ Event.newData=True # True is default
 Event.ecount='00'
 edateold=""
 # events older than available in NEIC
-CMTS=pd.read_csv('Recent_CMTS.txt', sep='\s+', comment="#")  # any amount of whitespace
+CMTS=pd.read_csv('M6.5pCMTS.txt', sep='\s+', comment="#")  # any amount of whitespace
+#CMTS=pd.read_csv('Giants.txt', sep='\s+', comment="#")  # any amount of whitespace
+#CMTS=pd.read_csv('Sumatra_2004.txt', sep='\s+', comment="#")  # any amount of whitespace
 for index, EQ in CMTS.iterrows():
     eloc = [EQ.LAT,EQ.LONG,EQ.DEPTH] 
     year,mo,dd = EQ.DATE.split('/')
     hh,mn,sec = EQ.TIME.split(':')
+    if float(sec) >=60 :   # alternative solution would be to just make sec = 59.9
+        sec=59.9
     etime=(UTCDateTime(int(year),int(mo),int(dd),int(hh),int(mn),float(sec)))
     # iterate ecount
     if EQ.DATE == edateold:
@@ -33,6 +37,7 @@ for index, EQ in CMTS.iterrows():
     Event.eventname=etime2name(etime,ecount=Event.ecount)
     Event.origin=[eloc,etime]
     Event.focmech=[EQ.STK, EQ.DP, EQ.RKE] # phi,delta,lmbda
+    Event.Mw=EQ.Mw
 
     print("\n\n"+Event.eventname+" ===============================")
     #try:
