@@ -334,14 +334,21 @@ def tstar(f):
   """
   Tstar as a function of frequency for teleseismic shallow EQs
   Digitized from Choy and Boatwright 1995 for shallow events at teleseismic distances
-  (which they derived from Choy and Cormier (1986) -which shows only a 600km depth event)
   """
-  if (f < 0.1) :
-    tst=0.9-0.1*log10(f)
-  elif (f < 1) :
-    tst=0.5-0.5*log10(f)
-  else :
-    tst=0.5-.10*log10(f)  # TODO check values
+  f = np.asarray(f)
+  # Create an array to store the results
+  tst = np.zeros_like(f, dtype=float)
+
+  # Define conditions for piecewise function
+  cond1 = (f < 0.1)
+  tst[cond1] = 0.9 - 0.1 * np.log10(f[cond1])
+
+  cond2 = (f >= 0.1)  & (f < 1)
+  tst[cond2] = 0.5 - 0.5 * np.log10(f[cond2])
+
+  cond3 = f >= 1
+  tst[cond3] = 0.5 - 0.1 * np.log10(f[cond3])
+  
   return tst
 
 def gttP(depkm,distdeg):
@@ -851,7 +858,7 @@ def wave2energytinc(tr,Defaults=Defaults, Event=Event, fband=Defaults.waveparams
       tr = trslice
   else:
       tr = process_waves(trslice, freqmin=fmin, freqmax=fmax)
-  trf=fft(tr)
+  trf=fft(tr)  # TRace in Frequency domain
   # # recreating obspy.freqatributes.spectrum
   n1=0; n2=len(tr)
   n=n2-n1
@@ -871,15 +878,16 @@ def wave2energytinc(tr,Defaults=Defaults, Event=Event, fband=Defaults.waveparams
   estFgP2=estFgPcorrect(edistdeg)
   
   # integration prep 
-  trftstar=np.full_like(trf.real,0)
+  trftstar=np.full_like(trf.real,0)  #TRace in F-domain corrected for TSTAR
   #sinu=0
   for j in range(0,len(f)-1):
     if (f[j]>fmin) & (f[j]<=fmax):
-        trftstar[j]=trf[j].real*(exp(2*pi*f[j]*tstar(f[j])))**.5
+        trftstar[j]=trf[j].real*(exp(pi*f[j]*tstar(f[j])))  # Note. pi not 2pi because its on the amplitude of the V spectrum not Energy
     else:
         trftstar[j] = trf[j].real
   # remerge phase info with corrected amplitude and rebuild timeseries 
-  ttstar=ifft(trftstar.real+1j*trf.imag) 
+  ttstar=ifft(trftstar.real+1j*trf.imag) # TR (in time domain) corrected for TSTAR  
+
   correction1=2*pi*dt*rho_site*pvel_site*((rearth/geomsp)**2)*4*pi*avfpsq*(1+qbc) # true energy for mech
   #Ettstar=sum(abs(ttstar)**2)
   #Corrected_Energy=Ettstar*correction1/FgP2  # using supplied mechanism
