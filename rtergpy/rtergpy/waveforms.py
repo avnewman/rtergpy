@@ -9,7 +9,7 @@ from obspy.geodetics.base import kilometers2degrees as km2d
 from obspy.geodetics.base import gps2dist_azimuth as ll2az
 from obspy.taup import TauPyModel
 from numpy import sin,cos,arcsin,sqrt,abs,pi,log10,exp
-from scipy.fftpack import fft,ifft
+from scipy.fft import fft,ifft,fftfreq
 from scipy.stats import gmean 
 from tqdm import tqdm
 from compress_pickle import dump as cpkldump # reading/writing compressed pickles
@@ -139,7 +139,14 @@ def convert_SeismoGNSS(tr):
 
 def process_waves(st,taper=0.05, freqmin=0.01, freqmax=2, **kwargs):
     """
-    performs default waveform processing, on a copy, that is returned.
+    performs initial data prep on a copy of the waveforms:
+        - detrend
+        - taper 
+        - instrument response removal
+        - convert to velocity
+        - bandpass filter
+        - detrend and taper again
+    Returns the processes stream.
     """
     # waveform processing
     stp=st.copy()  # create backup
@@ -340,7 +347,10 @@ def tstar(f):
   tst = np.zeros_like(f, dtype=float)
 
   # Define conditions for piecewise function
-  cond1 = (f < 0.1)
+  cond0 = (f <= 0.0)
+  tst[cond0] = 0
+
+  cond1 = (f > 0) & (f < 0.1)
   tst[cond1] = 0.9 - 0.1 * np.log10(f[cond1])
 
   cond2 = (f >= 0.1)  & (f < 1)
@@ -821,7 +831,7 @@ def load_seismoGNSS_waves(*, Defaults, Event, event_mseed, df_path):
 def wave2energytinc(tr,Defaults=Defaults, Event=Event, fband=Defaults.waveparams[0][0], **kwargs):
   """
   calculate estimated earthquake energy as a function of time using 
-  the rebuit time-series hopefully allowing for substantial speedup.
+  the rebuit time-series allowing for substantial speedup.
   frequency range, and earth parameters
   from Newman et al., (1998)
   tr = obspy style waveform with response information and distance info attached
@@ -858,13 +868,13 @@ def wave2energytinc(tr,Defaults=Defaults, Event=Event, fband=Defaults.waveparams
       tr = trslice
   else:
       tr = process_waves(trslice, freqmin=fmin, freqmax=fmax)
+
   trf=fft(tr)  # TRace in Frequency domain
   # # recreating obspy.freqatributes.spectrum
-  n1=0; n2=len(tr)
-  n=n2-n1
+  n=len(tr)
   srate=tr.stats.sampling_rate
   dt=1/srate    
-  f=np.linspace(0,srate/2,n)
+  f=fftfreq(n, d=dt)
 
   # focal and distance corrections, 
   # focal corrections
@@ -878,15 +888,19 @@ def wave2energytinc(tr,Defaults=Defaults, Event=Event, fband=Defaults.waveparams
   estFgP2=estFgPcorrect(edistdeg)
   
   # integration prep 
-  trftstar=np.full_like(trf.real,0)  #TRace in F-domain corrected for TSTAR
-  #sinu=0
-  for j in range(0,len(f)-1):
-    if (f[j]>fmin) & (f[j]<=fmax):
-        trftstar[j]=trf[j].real*(exp(pi*f[j]*tstar(f[j])))  # Note. pi not 2pi because its on the amplitude of the V spectrum not Energy
-    else:
-        trftstar[j] = trf[j].real
-  # remerge phase info with corrected amplitude and rebuild timeseries 
-  ttstar=ifft(trftstar.real+1j*trf.imag) # TR (in time domain) corrected for TSTAR  
+  #trftstar=np.full_like(trf.real,0)  #TRace in F-domain corrected for TSTAR
+  #for j in range(0,len(f)-1):
+  #  if (f[j]>fmin) & (f[j]<=fmax):
+  #      trftstar[j]=trf[j].real*(exp(pi*f[j]*tstar(f[j])))  # Note. pi not 2pi because its on the amplitude of the V spectrum not Energy
+  #  else:
+  #      trftstar[j] = trf[j].real
+# Adding tstar correction to amplitude and energy calculations
+  trftstar=trf.copy()
+  fmask= (np.abs(f)>fmin) & (np.abs(f)<=fmax)
+  trftstar[fmask] *= np.exp(np.pi*np.abs(f[fmask])*tstar(np.abs(f[fmask])))
+
+  ttstar=ifft(trftstar).real
+  #ttstar=(ifft(trftstar.real+1j*trf.imag)).real # TR (in time domain) corrected for TSTAR  
 
   correction1=2*pi*dt*rho_site*pvel_site*((rearth/geomsp)**2)*4*pi*avfpsq*(1+qbc) # true energy for mech
   #Ettstar=sum(abs(ttstar)**2)
@@ -924,7 +938,7 @@ def ErgsFromWaves(st,Defaults=Defaults,Event=Event,**kwargs):
     if len(fbands) > 2:
         print("WARNING:  will only iterate over first 2 of ",len(fbands),"frequency bands")
     fbandlabel="BB"
-    for fband in fbands[:2]:   # will only iterate over first to sets of bands if more are included
+    for fband in fbands[:2]:   # will only iterate over first two sets of bands if more are included
         tempEdf_dict = {}  # energies dictionary
         print("Running fband",fband,"Hz:")
         netstatchan=[0]*len(st)
