@@ -11,21 +11,18 @@ A paper describing this new code is forthcoming.
 
 ## Install 
 ### Create a usable Conda environment for working with the package
+*Note that it is really helpful to make sure that you are not in an active conda environment (including base) when you create a new one, otherwise they become linked and strange things happen.*
 ```
 # create with a bunch of packages
-conda create --name rtergpy python ipython ipykernel 
+conda create --name rtergpy python ipython ipykernel pip gmt pygmt matplotlib tqdm pandas obspy 
 ```
 ### Once you're in the proper environment, for me it is done by:
 ``` 
 conda activate rtergpy
 ```
-### First install gmt using conda
+### Install remaining external package via pip
 ```
-conda install gmt
-```
-### Install remaining external packages via pip
-```
-pip install pygmt compress_pickle matplotlib tqdm obspy pandas
+pip install  compress_pickle
 ```
 
 ### Install the `rtergpy` pagkage by going into this directory `rtergpy` (directory with `setup.py`) and using pip:
@@ -34,7 +31,7 @@ pip install pygmt compress_pickle matplotlib tqdm obspy pandas
 ```
 pip install .
 # alternatively, install from another directory, but point to that directory
-pip install '/path/to/setup/.py/file'
+pip install '/path/to/setup.py'
 ```
 If there are any additonal dependencies needed, you may need to install these first.
 
