@@ -141,7 +141,8 @@ def bestWindow(E, windows,startTime=60, excludeLast=0, choice="MaxSlope", **kwar
             if len(x) >  2:  # Need at least 3 points for a fit
                 coeffs = np.polyfit(x, y, 1)  # coeffs[0]=slope, coeffs[1]=intercept
                 yfit = np.polyval(coeffs, x)
-                misfit = np.sqrt(np.mean((y - yfit) ** 2))/(wlen-2)
+#                misfit = np.sqrt(np.mean((y - yfit) ** 2))/(wlen-2)
+                misfit = np.sqrt(np.sum((y - yfit) ** 2)/(wlen-2))
             else:
                 coeffs = [np.nan, np.nan]
                 misfit = np.nan
