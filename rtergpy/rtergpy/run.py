@@ -114,10 +114,18 @@ def logmeanEnergy(E, Defaults=defaults(), **kwargs):
     return 10 ** logEclean.mean(axis=1),logEclean.shape[1]  # mean of log values above cutoff
 
 def bestWindow(E, windows,startTime=60, excludeLast=0, choice="MaxSlope", **kwargs):
-    """Find the best window for growth of cumulative energy, E"""
-    tlen=len(E)-excludeLast  # length of time series [seconds]. includes prePtime
+    """
+    Find the best window for growth or decay of the cumulative energy, E
+    E = cumulative energy time series (pandas series)
+    windows = array of window lengths to try (in seconds)
+    startTime = time to start looking for windows (seconds)
+    excludeLast = number of seconds at end of time series to exclude from consideration
+    choice = "MaxSlope" or "MinMisfit" to choose best window using either the maximum slope or minimum misfit
+    
+    returns minMF_Window, minMF_t1, minMF_t2, minMF_slope, minMF_intercept, minMF, mresults
+    """
+    tlen=len(E)-excludeLast  # length of time series to use[seconds]. includes prePtime
     seq = np.arange(startTime, tlen + 1-excludeLast)
-    window=20  # seconds
     # Fit growth of HF data
     mresults = []
     for window in windows: 
@@ -126,7 +134,7 @@ def bestWindow(E, windows,startTime=60, excludeLast=0, choice="MaxSlope", **kwar
             t2 = t1 + window    
             if t2 > tlen:  # keep it from running into a wall
                 t2 = tlen
-            wlen= t2 - t1    
+            wlen= t2 - t1  
             # Linear fit for EHFnormsum between t1 and t2
             x = np.arange(t1, t2)
             y = E.iloc[t1:t2]
@@ -445,10 +453,13 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
             # Extract best window fit info
             fullwindow=int(Defaults.waveparams[1][1]+Defaults.waveparams[1][0])
             halfwindow=int(fullwindow/2)
-            windowUp= np.arange(5, halfwindow, 5)
-            upResults=bestWindow(EHFlmean, windows=windowUp, starttime=0-prePtime, minwindow=10, choice="MaxSlope") # find the best fit and window for the up-slope (controlled in part by prePtime and window choices)
-            windowDown= np.arange(halfwindow,fullwindow,5)
-            downResults=bestWindow(EHFlmean, windows=windowDown, excludeLast=60,choice="MinMisfit", startTime=upResults[2]+upResults[0]) # find the best fit and window for the down-slope (controlled in part by prePtime and window choices)
+            quarterwindow=int(fullwindow/4)
+            
+            windowUp= np.arange(3, quarterwindow, 1) # use at least 3 second and up to 1/4 of the total time series for fitting
+            upResults=bestWindow(EHFlmean, windows=windowUp, startTime=0-prePtime, excludeLast=halfwindow, choice="MaxSlope",  minwindow=3) # find the best fit and window for the up-slope (controlled in part by prePtime and window choices)
+            startTimeDown=upResults[2]+upResults[0] # end of upslope fit + window used 
+            windowDown= np.arange(halfwindow,fullwindow,5) # tries to use as much data as possible after the upslope
+            downResults=bestWindow(EHFlmean, windows=windowDown, startTime=startTimeDown, excludeLast=60, choice="MinMisfit") # find the best fit and window for the down-slope (controlled in part by prePtime and window choices)
 
             # Extract best window fit info
             Txo=resultsWindow2Txo(upResults,downResults,prePtime)
@@ -471,7 +482,6 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     Event.EBBTxo=EBBTxo
     Event.EHFTxo=EHFTxo
     Event.Txo=Txo
-
 
     # Create plots  
     print("Making figures\n")
