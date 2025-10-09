@@ -602,29 +602,49 @@ def src2ergs(Defaults=defaults(), Event=event(), showPlots=False, **kwargs):
     except:
         print("ERROR: writing results for"+eventname)
     os.chdir(origwd)  # go back to old directory
-
+    
+# def mergeResults(Defaults=defaults(), iteration='00', **kwargs):
+#     """
+#     Reads all processed event information and returns a master dataframe of summary result information
+#     """
+#     import glob
+#     import pandas as pd
+#     files= glob.glob(Defaults.edirbase +'/[12]???/[12]*/'+iteration+'/pkls/Results*.pkl')
+#     prior=''
+#     for file in files:
+#         if not prior: # create first time
+#             df=pd.read_pickle(file)
+#             prior=1  # no longer first
+#         else:
+#             dflocal=pd.read_pickle(file)
+#             df=df.append(dflocal,ignore_index=True)
+#     # replace list ttimes wih columsn of individual values
+#     dfttimes=pd.DataFrame(df['ttimes'].to_list(), columns = ['tacer', 't25', 't75'])
+#     df.drop('ttimes', axis=1, inplace=True)
+#     df.insert(16, 'tacer', dfttimes['tacer'],True)
+#     df.insert(17, 't25', dfttimes['t25'],True)
+#     df.insert(18, 't75', dfttimes['t75'],True)
+#     df.sort_values(by=['eventname'],inplace=True,ignore_index=True)  # results should be time sorted now
+#     return df
 def mergeResults(Defaults=defaults(), iteration='00', **kwargs):
     """
     Reads all processed event information and returns a master dataframe of summary result information
-    """ 
+    """
     import glob
     import pandas as pd
-    
-    
-    files= glob.glob(Defaults.edirbase +'/[12]???/[12]*/'+iteration+'/pkls/Results*.pkl')
-    prior='' 
+    files = glob.glob(Defaults.edirbase + '/[12]???/[12]*/' + iteration + '/pkls/Results*.pkl')
+    dfs = []
     for file in files:
-        if not prior: # create first time
-            df=pd.read_pickle(file)
-            prior=1  # no longer first
-        else:
-            dflocal=pd.read_pickle(file)
-            df=df.append(dflocal,ignore_index=True)
-    # replace list ttimes wih columsn of individual values
-    dfttimes=pd.DataFrame(df['ttimes'].to_list(), columns = ['tacer', 't25', 't75'])
+        dfs.append(pd.read_pickle(file))
+    if not dfs:
+        return pd.DataFrame()  # return empty if nothing found
+    df = pd.concat(dfs, ignore_index=True)
+    # replace list ttimes with columns of individual values
+    dfttimes = pd.DataFrame(df['ttimes'].to_list(), columns=['tacer', 't25', 't75'])
     df.drop('ttimes', axis=1, inplace=True)
-    df.insert(16, 'tacer', dfttimes['tacer'],True)
-    df.insert(17, 't25', dfttimes['t25'],True)
-    df.insert(18, 't75', dfttimes['t75'],True)
-    df.sort_values(by=['eventname'],inplace=True,ignore_index=True)  # results should be time sorted now
+    df.insert(16, 'tacer', dfttimes['tacer'], True)
+    df.insert(17, 't25', dfttimes['t25'], True)
+    df.insert(18, 't75', dfttimes['t75'], True)
+    # results should be time sorted now
+    df.sort_values(by=['eventname'], inplace=True, ignore_index=True)
     return df
